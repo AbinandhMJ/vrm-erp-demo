@@ -1,2 +1,0 @@
-
-VRM ERP DEMO Application

@@ -1,0 +1,6 @@
+{
+  "name": "VRM IAS Academy ERP",
+  "description": "Comprehensive ERP Demo Application for VRM IAS Academy managing admissions CRM, academic batches, student & faculty portals, online assessments, fee invoicing, and government exam alerts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

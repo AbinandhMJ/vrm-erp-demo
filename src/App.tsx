@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
@@ -27,8 +27,18 @@ const MainLayout: React.FC = () => {
     closeModal,
     selectedReceiptForView,
     closeReceiptView,
-    isFullscreen
+    isFullscreen,
+    role,
+    hasActivityData,
+    loadSampleData,
+    openModal
   } = useApp();
+  const isAdmin = role === 'management' || role === 'office_staff';
+
+  // Content scrolls inside <main>, so reset it to the top when switching modules.
+  useEffect(() => {
+    document.getElementById('app-main')?.scrollTo({ top: 0 });
+  }, [activeTab]);
 
   const renderActiveTabContent = () => {
     switch (activeTab) {
@@ -66,20 +76,47 @@ const MainLayout: React.FC = () => {
   };
 
   return (
-    <div className={`min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors ${
-      isFullscreen ? 'fixed inset-0 z-50 overflow-hidden w-screen h-screen' : ''
+    // App shell is exactly one viewport tall: header and sidebar stay put, only <main> scrolls.
+    <div className={`app-shell h-[100dvh] flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors ${
+      isFullscreen ? 'fixed inset-0 z-50 w-screen' : ''
     }`}>
       {/* Top Header */}
       <Header />
 
       {/* Main Viewport Body */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="app-body flex-1 min-h-0 flex overflow-hidden">
         {/* Collapsible / Mobile Responsive Sidebar */}
         <Sidebar />
 
         {/* Content Viewport */}
-        <main className="flex-1 overflow-y-auto p-3 sm:p-5 lg:p-7 max-w-[1440px] mx-auto w-full">
-          {renderActiveTabContent()}
+        <main id="app-main" className="app-main flex-1 min-w-0 overflow-y-auto overscroll-contain">
+          <div className="p-3 sm:p-5 lg:p-7 max-w-[1440px] mx-auto w-full">
+            {isAdmin && !hasActivityData && (
+              <div className="mb-5 p-4 rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="text-xs text-amber-950 dark:text-amber-200">
+                  <p className="font-bold text-sm">No students or enquiries yet</p>
+                  <p className="mt-0.5 text-amber-900/80 dark:text-amber-200/80">
+                    Everything you add is saved in this browser. Start by enrolling a student or capturing a lead, or load a sample academy to explore.
+                  </p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => openModal('admission')}
+                    className="px-3 py-2 text-xs font-semibold rounded-lg bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-slate-800"
+                  >
+                    Enroll first student
+                  </button>
+                  <button
+                    onClick={loadSampleData}
+                    className="px-3 py-2 text-xs font-bold rounded-lg bg-slate-900 dark:bg-amber-600 text-white hover:bg-slate-800 dark:hover:bg-amber-500"
+                  >
+                    Load sample data
+                  </button>
+                </div>
+              </div>
+            )}
+            {renderActiveTabContent()}
+          </div>
         </main>
       </div>
 

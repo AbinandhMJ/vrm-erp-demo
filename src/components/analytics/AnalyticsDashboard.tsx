@@ -2,6 +2,9 @@ import React, { useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { invoiceBalance } from '../../lib/fees';
+import { BarsChart, ChartCard, LinesChart, lakhs, pct } from '../charts/Charts';
+import { addDays, parseISODate } from '../../lib/dates';
+import { weeklyAttendance } from '../../lib/metrics';
 
 const lakh = (n: number) => `₹${(n / 100000).toFixed(2)}L`;
 
@@ -12,13 +15,6 @@ const SOURCE_LABELS: Record<string, string> = {
   field_agent: 'Field agent / college visit',
   seminar: 'Seminar'
 };
-const SOURCE_COLORS: Record<string, string> = {
-  website: 'bg-amber-500',
-  walk_in: 'bg-blue-600',
-  referral: 'bg-purple-600',
-  field_agent: 'bg-emerald-600',
-  seminar: 'bg-rose-500'
-};
 
 const Card: React.FC<{ title: string; right?: React.ReactNode; children: React.ReactNode }> = ({ title, right, children }) => (
   <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-2xs space-y-4">
@@ -27,18 +23,6 @@ const Card: React.FC<{ title: string; right?: React.ReactNode; children: React.R
       {right && <span className="text-xs text-slate-400 shrink-0">{right}</span>}
     </div>
     {children}
-  </div>
-);
-
-const Bar: React.FC<{ label: string; value: string; pct: number; color?: string }> = ({ label, value, pct, color = 'bg-slate-900 dark:bg-amber-500' }) => (
-  <div className="space-y-1">
-    <div className="flex justify-between gap-3 text-xs">
-      <span className="text-slate-700 dark:text-slate-300 font-medium truncate">{label}</span>
-      <span className="font-mono font-bold text-slate-900 dark:text-white tabular-nums shrink-0">{value}</span>
-    </div>
-    <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-      <div className={`${color} h-full rounded-full transition-all`} style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} />
-    </div>
   </div>
 );
 
@@ -52,7 +36,7 @@ const Delta: React.FC<{ value: number; suffix?: string }> = ({ value, suffix = '
 );
 
 export const AnalyticsDashboard: React.FC = () => {
-  const { students, leads, counselors, invoices, receipts, batches, assessmentTests, studentAttempts, staffMembers, tickets, today, setActiveTab } = useApp();
+  const { students, leads, counselors, invoices, receipts, batches, assessmentTests, studentAttempts, staffMembers, tickets, attendance, dailyQuizAttempts, today, setActiveTab } = useApp();
 
   const months = useMemo(() => {
     const out: { key: string; label: string }[] = [];
@@ -128,6 +112,23 @@ export const AnalyticsDashboard: React.FC = () => {
     const cClosed = mine.filter(l => l.status === 'converted' || l.status === 'dropped');
     const cConv = mine.filter(l => l.status === 'converted').length;
     return { c, total: mine.length, conv: cConv, rate: cClosed.length ? Math.round((cConv / cClosed.length) * 100) : 0 };
+  });
+
+  // ---------- chart rows ----------
+  const collectionRows = months.map((m, i) => ({ month: m.label.split(' ')[0], collected: collectedByMonth[i] }));
+  const funnelRows = months.map((m, i) => ({
+    month: m.label.split(' ')[0],
+    enquiries: leads.filter(l => l.createdAt.slice(0, 7) === m.key).length,
+    admissions: admissionsByMonth[i]
+  }));
+  const attendanceRows = weeklyAttendance(attendance, students, today, 12);
+  const testRows = testTrend.map(t => ({ test: t.test.code.replace('VRM-', ''), average: t.avg }));
+  const quizRows = Array.from({ length: 14 }, (_, i) => {
+    const d = addDays(today, i - 13);
+    return {
+      day: parseISODate(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+      answered: dailyQuizAttempts.filter(a => a.date === d).length
+    };
   });
 
   const kpi = 'p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs';
@@ -206,59 +207,45 @@ export const AnalyticsDashboard: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card title="Monthly Fee Collections" right="Last 6 months">
-          <div className="space-y-3">
-            {months.map((m, i) => (
-              <Bar key={m.key} label={i === 5 ? `${m.label} (to date)` : m.label} value={lakh(collectedByMonth[i])} pct={(collectedByMonth[i] / maxCollected) * 100} />
-            ))}
-          </div>
-        </Card>
+        <ChartCard title="Fee collections" note="Per month, last 6 months" empty={totalCollected === 0} emptyText="No payments recorded yet.">
+          <BarsChart data={collectionRows} xKey="month" series={[{ key: 'collected', label: 'Collected' }]} formatValue={lakhs} />
+        </ChartCard>
 
-        <Card title="New Admissions per Month" right="Last 6 months">
-          <div className="space-y-3">
-            {months.map((m, i) => (
-              <Bar
-                key={m.key}
-                label={i === 5 ? `${m.label} (to date)` : m.label}
-                value={`${admissionsByMonth[i]} students`}
-                pct={(admissionsByMonth[i] / maxAdmissions) * 100}
-                color="bg-emerald-600"
-              />
-            ))}
-          </div>
-        </Card>
+        <ChartCard title="Enquiries and admissions" note="Per month" empty={leads.length === 0 && students.length === 0} emptyText="No enquiries or admissions yet.">
+          <BarsChart
+            data={funnelRows}
+            xKey="month"
+            series={[
+              { key: 'enquiries', label: 'Enquiries' },
+              { key: 'admissions', label: 'Admissions' }
+            ]}
+          />
+        </ChartCard>
 
-        <Card title="Student Performance Trend" right="Average score per test">
-          {testTrend.length === 0 ? (
-            <p className="text-xs text-slate-400">No tests conducted yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {testTrend.map(t => (
-                <Bar
-                  key={t.test.id}
-                  label={t.test.title}
-                  value={`${t.avg}% · ${t.takers} students`}
-                  pct={t.avg}
-                  color={t.avg >= 60 ? 'bg-emerald-600' : t.avg >= 40 ? 'bg-amber-500' : 'bg-rose-500'}
-                />
-              ))}
-            </div>
-          )}
-        </Card>
+        <ChartCard title="Class attendance" note="Weekly average, last 12 weeks" empty={attendanceRows.every(r => r.attendance === null)} emptyText="Attendance appears here once faculty start marking classes.">
+          <LinesChart data={attendanceRows} xKey="week" series={[{ key: 'attendance', label: 'Attendance' }]} formatValue={pct} yMax={100} />
+        </ChartCard>
 
-        <Card title="Lead Sources" right={`${leads.length} enquiries`}>
-          <div className="space-y-3">
-            {sourceStats.map(s => (
-              <Bar
-                key={s.src}
-                label={`${SOURCE_LABELS[s.src]} · ${s.conv} joined`}
-                value={`${s.count} (${leads.length ? Math.round((s.count / leads.length) * 100) : 0}%)`}
-                pct={leads.length ? (s.count / leads.length) * 100 : 0}
-                color={SOURCE_COLORS[s.src]}
-              />
-            ))}
-          </div>
-        </Card>
+        <ChartCard title="Test performance" note="Average score per test" empty={testTrend.length === 0} emptyText="No tests attempted yet.">
+          <LinesChart data={testRows} xKey="test" series={[{ key: 'average', label: 'Average score' }]} formatValue={pct} yMax={100} />
+        </ChartCard>
+
+        <ChartCard title="Daily quiz participation" note="Students answering, last 14 days" empty={dailyQuizAttempts.length === 0} emptyText="No daily quiz answers yet.">
+          <BarsChart data={quizRows} xKey="day" series={[{ key: 'answered', label: 'Students answered' }]} />
+        </ChartCard>
+
+        <ChartCard title="Where enquiries come from" note={`${leads.length} enquiries`} empty={leads.length === 0} emptyText="No enquiries yet.">
+          <BarsChart
+            horizontal
+            data={sourceStats.map(x => ({ source: SOURCE_LABELS[x.src], enquiries: x.count, joined: x.conv }))}
+            xKey="source"
+            series={[
+              { key: 'enquiries', label: 'Enquiries' },
+              { key: 'joined', label: 'Joined' }
+            ]}
+            height={260}
+          />
+        </ChartCard>
       </div>
 
       <Card title="Batch Health" right="Occupancy, attendance and fees by batch">

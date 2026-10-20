@@ -17,6 +17,7 @@ export const FacultyPortal: React.FC = () => {
     setActiveTab,
     staffMembers,
     currentStaff,
+    dailyQuizAttempts,
     today
   } = useApp();
 
@@ -92,7 +93,9 @@ export const FacultyPortal: React.FC = () => {
     const avgAtt = roster.length ? Math.round((roster.reduce((sum, s) => sum + s.attendancePercentage, 0) / roster.length) * 10) / 10 : 0;
     const tested = roster.filter(s => s.averageTestScore > 0);
     const avgScore = tested.length ? Math.round((tested.reduce((sum, s) => sum + s.averageTestScore, 0) / tested.length) * 10) / 10 : 0;
-    return { batch: b, size: roster.length, avgAtt, avgScore, lowAttendance: roster.filter(s => s.attendancePercentage < 75).length };
+    const ids = new Set(roster.map(s => s.id));
+    const quizToday = dailyQuizAttempts.filter(a => a.date === today && ids.has(a.studentId)).length;
+    return { batch: b, size: roster.length, avgAtt, avgScore, quizToday, lowAttendance: roster.filter(s => s.attendancePercentage < 75).length };
   });
 
   const myPayouts = salaryPayouts.filter(p => p.staffId === currentFaculty?.id);
@@ -210,6 +213,9 @@ export const FacultyPortal: React.FC = () => {
                   <span className="text-[10px] text-slate-400 block">Avg Test Score</span>
                   <span className="font-mono font-bold text-amber-600 dark:text-amber-400">{o.avgScore ? `${o.avgScore}%` : '—'}</span>
                 </div>
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                Daily quiz today: <b className="text-slate-800 dark:text-slate-200">{o.quizToday}</b> of {o.size} answered
               </div>
               {o.lowAttendance > 0 && (
                 <div className="flex items-center gap-1.5 text-[11px] text-rose-600 dark:text-rose-400">

@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { Modal } from '../common/Modal';
 import { Invoice } from '../../types';
 import { addDays, formatDate, weekdayOf } from '../../lib/dates';
 import { invoiceBalance } from '../../lib/fees';
+import { DailyQuizCard } from './DailyQuizCard';
 import {
   GraduationCap,
   Calendar,
@@ -315,7 +317,9 @@ export const StudentPortal: React.FC = () => {
       {/* Tab 1: Dashboard Overview & Daily Timetable */}
       {activeSubTab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-2xs space-y-4">
+          <div className="lg:col-span-2 space-y-6">
+          <DailyQuizCard studentId={currentStudent.id} readOnly={isViewAs} />
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-2xs space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                 Weekly Class Schedule ({currentStudent?.enrolledBatchName})
@@ -346,6 +350,7 @@ export const StudentPortal: React.FC = () => {
             </div>
           </div>
 
+          </div>
           <div className="space-y-4">
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-2xs space-y-3">
               <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
@@ -828,89 +833,76 @@ export const StudentPortal: React.FC = () => {
 
           {/* Student Online Payment Checkout Modal */}
           {payingInvoice && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
-              <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="w-5 h-5 text-amber-500" />
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                      Pay Tuition Installment: {payingInvoice.invoiceNumber}
-                    </h3>
-                  </div>
-                  <button onClick={() => setPayingInvoice(null)} className="text-slate-400 hover:text-slate-600">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
+            <Modal title={<>Pay Tuition Installment: {payingInvoice.invoiceNumber}</>} onClose={() => setPayingInvoice(null)} size="sm" bodyClassName="px-5 py-4 space-y-4">
 
-                <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Installment:</span>
-                    <span className="font-semibold text-slate-900 dark:text-white">
-                      Tranche {payingInvoice.installmentIndex} of {payingInvoice.totalInstallments}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Due Date:</span>
-                    <span className="font-mono text-slate-700 dark:text-slate-300">{formatDate(payingInvoice.dueDate)}</span>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t border-slate-200 dark:border-slate-700 font-mono text-sm font-bold">
-                    <span>Payable Amount:</span>
-                    <span className="text-emerald-700 dark:text-emerald-400">₹{invoiceBalance(payingInvoice).toLocaleString('en-IN')}</span>
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Demo payment gateway: no real money is charged. A receipt is issued instantly.
-                </p>
-                <form onSubmit={handlePayInvoice} className="space-y-3 text-xs">
-                  <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Choose Payment Method
-                    </label>
-                    <div className="space-y-2">
-                      {[
-                        { id: 'UPI', label: 'Instant UPI (Google Pay, PhonePe, Paytm, QR)' },
-                        { id: 'Credit/Debit Card', label: 'Credit or Debit Card (Visa / Mastercard / RuPay)' },
-                        { id: 'NetBanking', label: 'NetBanking (HDFC, SBI, ICICI, Axis)' }
-                      ].map(mode => (
-                        <label
-                          key={mode.id}
-                          className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition-colors ${
-                            payMethodChoice === mode.id
-                              ? 'border-amber-500 bg-amber-50/60 dark:bg-amber-950/40 text-slate-900 dark:text-white font-semibold'
-                              : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="payMethod"
-                            checked={payMethodChoice === mode.id}
-                            onChange={() => setPayMethodChoice(mode.id as any)}
-                            className="text-amber-600"
-                          />
-                          <span>{mode.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="pt-2">
-                    <button
-                      type="submit"
-                      disabled={isPayingProcessing}
-                      className="w-full py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-colors shadow-xs flex items-center justify-center gap-2"
-                    >
-                      <ShieldCheck className="w-4 h-4" />
-                      <span>
-                        {isPayingProcessing
-                          ? 'Authorizing Transaction...'
-                          : `Pay ₹${invoiceBalance(payingInvoice).toLocaleString('en-IN')} & Issue Receipt`}
-                      </span>
-                    </button>
-                  </div>
-                </form>
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Installment:</span>
+                <span className="font-semibold text-slate-900 dark:text-white">
+                  Tranche {payingInvoice.installmentIndex} of {payingInvoice.totalInstallments}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Due Date:</span>
+                <span className="font-mono text-slate-700 dark:text-slate-300">{formatDate(payingInvoice.dueDate)}</span>
+              </div>
+              <div className="flex justify-between pt-2 border-t border-slate-200 dark:border-slate-700 font-mono text-sm font-bold">
+                <span>Payable Amount:</span>
+                <span className="text-emerald-700 dark:text-emerald-400">₹{invoiceBalance(payingInvoice).toLocaleString('en-IN')}</span>
               </div>
             </div>
+
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Demo payment gateway: no real money is charged. A receipt is issued instantly.
+            </p>
+            <form onSubmit={handlePayInvoice} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Choose Payment Method
+                </label>
+                <div className="space-y-2">
+                  {[
+                    { id: 'UPI', label: 'Instant UPI (Google Pay, PhonePe, Paytm, QR)' },
+                    { id: 'Credit/Debit Card', label: 'Credit or Debit Card (Visa / Mastercard / RuPay)' },
+                    { id: 'NetBanking', label: 'NetBanking (HDFC, SBI, ICICI, Axis)' }
+                  ].map(mode => (
+                    <label
+                      key={mode.id}
+                      className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition-colors ${
+                        payMethodChoice === mode.id
+                          ? 'border-amber-500 bg-amber-50/60 dark:bg-amber-950/40 text-slate-900 dark:text-white font-semibold'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="payMethod"
+                        checked={payMethodChoice === mode.id}
+                        onChange={() => setPayMethodChoice(mode.id as any)}
+                        className="text-amber-600"
+                      />
+                      <span>{mode.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isPayingProcessing}
+                  className="w-full py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-colors shadow-xs flex items-center justify-center gap-2"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>
+                    {isPayingProcessing
+                      ? 'Authorizing Transaction...'
+                      : `Pay ₹${invoiceBalance(payingInvoice).toLocaleString('en-IN')} & Issue Receipt`}
+                  </span>
+                </button>
+              </div>
+            </form>
+            </Modal>
           )}
 
         </div>
@@ -959,79 +951,71 @@ export const StudentPortal: React.FC = () => {
 
       {/* Raise Mentor Query / Support Modal */}
       {isTicketModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Raise Query to Faculty / Administration</h3>
-              <button onClick={() => setIsTicketModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                ✕
-              </button>
-            </div>
+        <Modal title="Raise Query to Faculty / Administration" onClose={() => setIsTicketModalOpen(false)} size="sm" bodyClassName="px-5 py-4 space-y-4">
 
-            <form onSubmit={handleRaiseTicket} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Query Category</label>
-                <select
-                  value={ticketCategory}
-                  onChange={e => setTicketCategory(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                >
-                  <option value="Test Evaluation">Test Evaluation & Mentor Feedback</option>
-                  <option value="Fee & Invoicing">Fee Installment & Receipt Query</option>
-                  <option value="Material Access">Study Material Access Issue</option>
-                  <option value="Classroom & Batch">Classroom Attendance / Schedule Change</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Subject / Question Summary *</label>
-                <input
-                  type="text"
-                  value={ticketSubject}
-                  onChange={e => setTicketSubject(e.target.value)}
-                  placeholder="e.g. Doubts in Question 4 of Polity Mock"
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Detailed Explanation *</label>
-                <textarea
-                  rows={3}
-                  value={ticketDesc}
-                  onChange={e => setTicketDesc(e.target.value)}
-                  placeholder="Explain your doubt or slot request..."
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  required
-                />
-              </div>
-
-              {ticketSent && (
-                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>Ticket lodged! Faculty desk notified.</span>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsTicketModalOpen(false)}
-                  className="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 font-semibold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg"
-                >
-                  Submit Query
-                </button>
-              </div>
-            </form>
+        <form onSubmit={handleRaiseTicket} className="space-y-3 text-xs">
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Query Category</label>
+            <select
+              value={ticketCategory}
+              onChange={e => setTicketCategory(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+            >
+              <option value="Test Evaluation">Test Evaluation & Mentor Feedback</option>
+              <option value="Fee & Invoicing">Fee Installment & Receipt Query</option>
+              <option value="Material Access">Study Material Access Issue</option>
+              <option value="Classroom & Batch">Classroom Attendance / Schedule Change</option>
+            </select>
           </div>
-        </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Subject / Question Summary *</label>
+            <input
+              type="text"
+              value={ticketSubject}
+              onChange={e => setTicketSubject(e.target.value)}
+              placeholder="e.g. Doubts in Question 4 of Polity Mock"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Detailed Explanation *</label>
+            <textarea
+              rows={3}
+              value={ticketDesc}
+              onChange={e => setTicketDesc(e.target.value)}
+              placeholder="Explain your doubt or slot request..."
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              required
+            />
+          </div>
+
+          {ticketSent && (
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>Ticket lodged! Faculty desk notified.</span>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setIsTicketModalOpen(false)}
+              className="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-1.5 font-semibold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg"
+            >
+              Submit Query
+            </button>
+          </div>
+        </form>
+        </Modal>
       )}
 
     </div>

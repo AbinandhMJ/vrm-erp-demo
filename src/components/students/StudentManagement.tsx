@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { Modal } from '../common/Modal';
 import { Student } from '../../types';
 import {
   GraduationCap,
@@ -30,6 +31,8 @@ export const StudentManagement: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [batchFilter, setBatchFilter] = useState('all');
   const [feeStatusFilter, setFeeStatusFilter] = useState('all');
+  // Fee and payment details are for office and management only (not faculty).
+  const canSeeFees = role === 'management' || role === 'office_staff';
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
   const filteredStudents = students.filter(student => {
@@ -60,7 +63,7 @@ export const StudentManagement: React.FC = () => {
             Student Management & Classroom Rosters
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Active civil services aspirants · Batch allocation · Fee settlement & Academic tracking
+            {canSeeFees ? 'Students, batches, fees and academic progress' : 'Students, batches and academic progress'}
           </p>
         </div>
 
@@ -100,6 +103,7 @@ export const StudentManagement: React.FC = () => {
             ))}
           </select>
 
+          {canSeeFees && (
           <select
             value={feeStatusFilter}
             onChange={e => setFeeStatusFilter(e.target.value)}
@@ -109,6 +113,7 @@ export const StudentManagement: React.FC = () => {
             <option value="paid">Fully Cleared (₹0 Due)</option>
             <option value="pending">Balance Pending</option>
           </select>
+          )}
         </div>
       </div>
 
@@ -122,14 +127,14 @@ export const StudentManagement: React.FC = () => {
                 <th className="px-4 py-3">Course & Batch</th>
                 <th className="px-4 py-3">Attendance Rate</th>
                 <th className="px-4 py-3">Test Avg</th>
-                <th className="px-4 py-3">Fee Status</th>
+                {canSeeFees && <th className="px-4 py-3">Fee Status</th>}
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
+                  <td colSpan={canSeeFees ? 6 : 5} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
                     No students found matching your filters.
                   </td>
                 </tr>
@@ -173,6 +178,7 @@ export const StudentManagement: React.FC = () => {
                         )}
                       </td>
 
+                      {canSeeFees && (
                       <td className="px-4 py-3.5 font-mono tabular-nums">
                         <div className="font-semibold text-slate-900 dark:text-white">
                           ₹{student.paidFee.toLocaleString('en-IN')}
@@ -188,6 +194,7 @@ export const StudentManagement: React.FC = () => {
                           </span>
                         )}
                       </td>
+                      )}
 
                       <td className="px-4 py-3.5 text-right space-x-1">
                         <button
@@ -208,131 +215,119 @@ export const StudentManagement: React.FC = () => {
 
       {/* Student 360 Profile Modal */}
       {selectedStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 max-w-2xl w-full p-6 space-y-5 my-8">
-            <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">{selectedStudent.name}</h3>
-                <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5">
-                  Roll ID: {selectedStudent.rollNumber} · Batch: {selectedStudent.enrolledBatchName}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedStudent(null)}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-md"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+        <Modal title={<>{selectedStudent.name}</>} subtitle={<>Roll ID: {selectedStudent.rollNumber} · Batch: {selectedStudent.enrolledBatchName}</>} onClose={() => setSelectedStudent(null)} size="lg" bodyClassName="px-5 py-4 space-y-5">
 
-            {/* Overview Stats */}
-            <div className="grid grid-cols-3 gap-3 text-center text-xs">
-              <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-                <span className="text-slate-500 dark:text-slate-400 block">Attendance Record</span>
-                <span className="text-base font-mono font-bold text-slate-900 dark:text-white mt-1 block">
-                  {selectedStudent.attendancePercentage}%
-                </span>
-              </div>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-                <span className="text-slate-500 dark:text-slate-400 block">Average Mock Score</span>
-                <span className="text-base font-mono font-bold text-slate-900 dark:text-white mt-1 block">
-                  {selectedStudent.averageTestScore ? `${selectedStudent.averageTestScore}%` : 'No tests yet'}
-                </span>
-              </div>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-                <span className="text-slate-500 dark:text-slate-400 block">Balance Fee</span>
-                <span className={`text-base font-mono font-bold mt-1 block ${selectedStudent.balanceFee === 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
-                  ₹{selectedStudent.balanceFee.toLocaleString('en-IN')}
-                </span>
-              </div>
-            </div>
+        {/* Overview Stats */}
+        <div className={`grid ${canSeeFees ? 'grid-cols-3' : 'grid-cols-2'} gap-3 text-center text-xs`}>
+          <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+            <span className="text-slate-500 dark:text-slate-400 block">Attendance Record</span>
+            <span className="text-base font-mono font-bold text-slate-900 dark:text-white mt-1 block">
+              {selectedStudent.attendancePercentage}%
+            </span>
+          </div>
+          <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+            <span className="text-slate-500 dark:text-slate-400 block">Average Mock Score</span>
+            <span className="text-base font-mono font-bold text-slate-900 dark:text-white mt-1 block">
+              {selectedStudent.averageTestScore ? `${selectedStudent.averageTestScore}%` : 'No tests yet'}
+            </span>
+          </div>
+          {canSeeFees && (
+          <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+            <span className="text-slate-500 dark:text-slate-400 block">Balance Fee</span>
+            <span className={`text-base font-mono font-bold mt-1 block ${selectedStudent.balanceFee === 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
+              ₹{selectedStudent.balanceFee.toLocaleString('en-IN')}
+            </span>
+          </div>
+          )}
+        </div>
 
-            {/* Detailed Meta */}
-            <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 dark:bg-slate-800/60 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
-              <div>
-                <span className="text-slate-400 dark:text-slate-500 font-medium">Contact & Location</span>
-                <p className="font-mono text-slate-800 dark:text-slate-200 mt-0.5">{selectedStudent.phone}</p>
-                <p className="text-slate-700 dark:text-slate-300 mt-0.5">{selectedStudent.email}</p>
-                <p className="text-slate-500 dark:text-slate-400 mt-1">{selectedStudent.address}</p>
-              </div>
+        {/* Detailed Meta */}
+        <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 dark:bg-slate-800/60 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+          <div>
+            <span className="text-slate-400 dark:text-slate-500 font-medium">Contact & Location</span>
+            <p className="font-mono text-slate-800 dark:text-slate-200 mt-0.5">{selectedStudent.phone}</p>
+            <p className="text-slate-700 dark:text-slate-300 mt-0.5">{selectedStudent.email}</p>
+            <p className="text-slate-500 dark:text-slate-400 mt-1">{selectedStudent.address}</p>
+          </div>
 
-              <div>
-                <span className="text-slate-400 dark:text-slate-500 font-medium">Guardian Details</span>
-                <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{selectedStudent.guardianName}</p>
-                <p className="font-mono text-slate-600 dark:text-slate-400 mt-0.5">{selectedStudent.guardianPhone}</p>
-                <p className="text-slate-500 dark:text-slate-400 mt-2">Scholarship: <span className="capitalize font-semibold text-amber-800 dark:text-amber-400">{selectedStudent.scholarshipApplied.replace(/_/g, ' ')}</span></p>
-              </div>
-            </div>
-
-            {(role === 'management' || role === 'office_staff') && (() => {
-              const acc = accounts.find(a => a.linkedStudentId === selectedStudent.id);
-              return (
-                <div className="text-xs p-3 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-200">
-                  <span className="font-semibold">Portal login:</span>{' '}
-                  {acc ? (
-                    <>
-                      <code className="font-mono">{acc.username}</code> / <code className="font-mono">{acc.password}</code>
-                      <span className="text-emerald-700/80 dark:text-emerald-300/70"> (shown for the demo only)</span>
-                    </>
-                  ) : (
-                    'not created'
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Fee Invoices History */}
-            <div>
-              <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-2">
-                Invoices & Payment Records
-              </h4>
-              <div className="space-y-2">
-                {invoices.filter(i => i.studentId === selectedStudent.id).map(inv => {
-                  const receipt = receipts.find(r => r.invoiceId === inv.id);
-                  return (
-                    <div key={inv.id} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs">
-                      <div>
-                        <div className="font-semibold text-slate-900 dark:text-white">{inv.invoiceNumber}</div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                          Installment {inv.installmentIndex} of {inv.totalInstallments} · Due {inv.dueDate}
-                        </div>
-                      </div>
-                      <div className="text-right flex items-center gap-3">
-                        <span className="font-mono font-bold text-slate-900 dark:text-white tabular-nums">
-                          ₹{inv.amount.toLocaleString('en-IN')}
-                        </span>
-                        {inv.status === 'paid' ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-emerald-700 dark:text-emerald-400 font-semibold text-xs">Paid</span>
-                            {receipt && (
-                              <button
-                                onClick={() => viewReceipt(receipt)}
-                                className="px-2 py-1 text-[11px] bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 text-amber-900 dark:text-amber-300 border border-amber-200 dark:border-amber-900 rounded"
-                              >
-                                View Receipt
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-rose-700 dark:text-rose-400 font-semibold text-xs">Pending</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
-              <button
-                onClick={() => setSelectedStudent(null)}
-                className="px-4 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg"
-              >
-                Close Profile
-              </button>
-            </div>
+          <div>
+            <span className="text-slate-400 dark:text-slate-500 font-medium">Guardian Details</span>
+            <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{selectedStudent.guardianName}</p>
+            <p className="font-mono text-slate-600 dark:text-slate-400 mt-0.5">{selectedStudent.guardianPhone}</p>
+            {canSeeFees && <p className="text-slate-500 dark:text-slate-400 mt-2">Scholarship: <span className="capitalize font-semibold text-amber-800 dark:text-amber-400">{selectedStudent.scholarshipApplied.replace(/_/g, ' ')}</span></p>}
           </div>
         </div>
+
+        {(role === 'management' || role === 'office_staff') && (() => {
+          const acc = accounts.find(a => a.linkedStudentId === selectedStudent.id);
+          return (
+            <div className="text-xs p-3 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-200">
+              <span className="font-semibold">Portal login:</span>{' '}
+              {acc ? (
+                <>
+                  <code className="font-mono">{acc.username}</code> / <code className="font-mono">{acc.password}</code>
+                  <span className="text-emerald-700/80 dark:text-emerald-300/70"> (shown for the demo only)</span>
+                </>
+              ) : (
+                'not created'
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Fee Invoices History (office / management only) */}
+        {canSeeFees && (
+        <div>
+          <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-2">
+            Invoices & Payment Records
+          </h4>
+          <div className="space-y-2">
+            {invoices.filter(i => i.studentId === selectedStudent.id).map(inv => {
+              const receipt = receipts.find(r => r.invoiceId === inv.id);
+              return (
+                <div key={inv.id} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs">
+                  <div>
+                    <div className="font-semibold text-slate-900 dark:text-white">{inv.invoiceNumber}</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Installment {inv.installmentIndex} of {inv.totalInstallments} · Due {inv.dueDate}
+                    </div>
+                  </div>
+                  <div className="text-right flex items-center gap-3">
+                    <span className="font-mono font-bold text-slate-900 dark:text-white tabular-nums">
+                      ₹{inv.amount.toLocaleString('en-IN')}
+                    </span>
+                    {inv.status === 'paid' ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-emerald-700 dark:text-emerald-400 font-semibold text-xs">Paid</span>
+                        {receipt && (
+                          <button
+                            onClick={() => viewReceipt(receipt)}
+                            className="px-2 py-1 text-[11px] bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 text-amber-900 dark:text-amber-300 border border-amber-200 dark:border-amber-900 rounded"
+                          >
+                            View Receipt
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-rose-700 dark:text-rose-400 font-semibold text-xs">Pending</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        )}
+
+        <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
+          <button
+            onClick={() => setSelectedStudent(null)}
+            className="px-4 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg"
+          >
+            Close Profile
+          </button>
+        </div>
+        </Modal>
       )}
 
     </div>

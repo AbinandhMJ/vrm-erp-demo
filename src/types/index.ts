@@ -352,3 +352,14 @@ export interface SupportTicket {
     text: string;
   }[];
 }
+
+/** A student's answers to the 2-question daily quiz. One per student per day. */
+export interface DailyQuizAttempt {
+  id: string;
+  studentId: string;
+  date: string; // YYYY-MM-DD
+  questionIds: string[];
+  answers: Record<string, number>;
+  correct: number;
+  total: number;
+}

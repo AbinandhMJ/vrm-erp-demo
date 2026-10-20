@@ -1,365 +1,206 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types';
-import {
-  ShieldCheck,
-  User,
-  GraduationCap,
-  Briefcase,
-  UserCheck,
-  Sparkles,
-  ArrowRight,
-  Sun,
-  Moon,
-  KeyRound,
-  CheckCircle2,
-  XCircle,
-  Table,
-  ChevronDown,
-  ChevronUp,
-  Info
-} from 'lucide-react';
+import { Eye, EyeOff, Moon, Sun, Loader2 } from 'lucide-react';
+
+const DEMO_ACCOUNTS: { role: UserRole; label: string; who: string }[] = [
+  { role: 'management', label: 'Management', who: 'Director' },
+  { role: 'office_staff', label: 'Office & Fees', who: 'Registrar' },
+  { role: 'faculty', label: 'Faculty', who: 'Polity lead' },
+  { role: 'field_agent', label: 'Counselor', who: 'Admissions' },
+  { role: 'student', label: 'Student', who: 'Aspirant' }
+];
 
 export const LoginView: React.FC = () => {
-  const { login, quickLogin, theme, toggleTheme } = useApp();
-  const [username, setUsername] = useState('director@vrmiasacademy.in');
-  const [password, setPassword] = useState('admin123');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [showRbacMatrix, setShowRbacMatrix] = useState(false);
+  const { login, quickLogin, accounts, theme, toggleTheme, todaysQuiz, loadSampleData, hasActivityData } = useApp();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const personas: {
-    role: UserRole;
-    name: string;
-    designation: string;
-    email: string;
-    pass: string;
-    icon: React.ReactNode;
-    accessSummary: string;
-    accentColor: string;
-    bgAccent: string;
-    badgeColor: string;
-  }[] = [
-    {
-      role: 'management',
-      name: 'Dr. V. R. Murugan, Ex-IRS',
-      designation: 'Founder & Director General',
-      email: 'director@vrmiasacademy.in',
-      pass: 'admin123',
-      icon: <GraduationCap className="w-5 h-5 text-amber-500" />,
-      accessSummary: 'Full Academy Governance: Financial ledgers, staff compensation & payouts, course creation, exam alert publishing & executive KPIs.',
-      accentColor: 'hover:border-amber-500',
-      bgAccent: 'group-hover:bg-amber-50 dark:group-hover:bg-amber-950/20',
-      badgeColor: 'bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-300'
-    },
-    {
-      role: 'office_staff',
-      name: 'P. Sangeetha',
-      designation: 'Head Registrar & Finance Controller',
-      email: 'registrar@vrmiasacademy.in',
-      pass: 'office123',
-      icon: <Briefcase className="w-5 h-5 text-blue-500" />,
-      accessSummary: 'Registrar & Billing: Student admissions, fee collections, invoice generation, attendance compliance & document records.',
-      accentColor: 'hover:border-blue-500',
-      bgAccent: 'group-hover:bg-blue-50 dark:group-hover:bg-blue-950/20',
-      badgeColor: 'bg-blue-100 dark:bg-blue-950/80 text-blue-900 dark:text-blue-300'
-    },
-    {
-      role: 'faculty',
-      name: 'Dr. K. Ramanathan',
-      designation: 'Senior Faculty - Polity & Governance',
-      email: 'ramanathan.polity@vrmiasacademy.in',
-      pass: 'faculty123',
-      icon: <UserCheck className="w-5 h-5 text-emerald-500" />,
-      accessSummary: 'Faculty Console: Live batch attendance marking, syllabus topic logging, study material distribution & student test review.',
-      accentColor: 'hover:border-emerald-500',
-      bgAccent: 'group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/20',
-      badgeColor: 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-900 dark:text-emerald-300'
-    },
-    {
-      role: 'student',
-      name: 'Aaditya Sharma',
-      designation: 'Enrolled Aspirant (VRM-2026-089)',
-      email: 'VRM-2026-089',
-      pass: 'student123',
-      icon: <User className="w-5 h-5 text-indigo-500" />,
-      accessSummary: 'Student Portal: Course progress, personalized timetable, mock test quizzes with auto-grading, digital receipts & notes dossier.',
-      accentColor: 'hover:border-indigo-500',
-      bgAccent: 'group-hover:bg-indigo-50 dark:group-hover:bg-indigo-950/20',
-      badgeColor: 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-900 dark:text-indigo-300'
-    },
-    {
-      role: 'field_agent',
-      name: 'Deepa Nathan',
-      designation: 'Senior Counselor & Field Outreach Lead',
-      email: 'deepa.outreach@vrmiasacademy.in',
-      pass: 'agent123',
-      icon: <Sparkles className="w-5 h-5 text-rose-500" />,
-      accessSummary: 'Field Outreach: Inbound CRM, college seminar rapid lead logger, counselor conversion SLAs & consultation scheduler.',
-      accentColor: 'hover:border-rose-500',
-      bgAccent: 'group-hover:bg-rose-50 dark:group-hover:bg-rose-950/20',
-      badgeColor: 'bg-rose-100 dark:bg-rose-950/80 text-rose-900 dark:text-rose-300'
-    }
-  ];
-
-  const rbacMatrix = [
-    { module: 'CRM & Lead Assignment', mgmt: true, office: true, faculty: false, student: false, agent: true },
-    { module: 'Walk-in Admission & Fee Plan Gateway', mgmt: true, office: true, faculty: false, student: false, agent: false },
-    { module: 'Student Directory & 360 Profile', mgmt: true, office: true, faculty: true, student: false, agent: false },
-    { module: 'Course & Batch Setup (faculty: view only)', mgmt: true, office: true, faculty: true, student: false, agent: false },
-    { module: 'Class Schedules & Timetable', mgmt: true, office: true, faculty: true, student: true, agent: false },
-    { module: 'Learning Material Distribution', mgmt: true, office: true, faculty: true, student: true, agent: false },
-    { module: 'Online Quizzes & Auto-Grading Engine', mgmt: true, office: true, faculty: true, student: true, agent: false },
-    { module: 'Automated Invoicing & Fee Receipts', mgmt: true, office: true, faculty: false, student: false, agent: false },
-    { module: 'Comprehensive Stakeholder Reports', mgmt: true, office: true, faculty: false, student: false, agent: false },
-    { module: 'Government Exam Alerts Publishing', mgmt: true, office: true, faculty: false, student: false, agent: false },
-    { module: 'Staff Records, Attendance & Payroll', mgmt: true, office: true, faculty: false, student: false, agent: false },
-    { module: 'Real-Time Analytics & Executive KPIs', mgmt: true, office: false, faculty: false, student: false, agent: false },
-    { module: 'Troubleshooting & Support Tickets', mgmt: true, office: true, faculty: true, student: true, agent: true }
-  ];
+  const question = todaysQuiz[0];
+  const firstStudent = accounts.find(a => a.role === 'student');
+  const todayLabel = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) {
-      setErrorMessage('Please enter email or Roll Number');
+    if (!username.trim() || !password) {
+      setError('Enter your username and password.');
       return;
     }
-    const success = login(username, password);
-    if (!success) {
-      setErrorMessage('Incorrect username or password.');
-    } else {
-      setErrorMessage('');
-    }
+    setBusy(true);
+    // Brief delay so the button state is visible; everything is local.
+    setTimeout(() => {
+      const ok = login(username, password);
+      setBusy(false);
+      if (!ok) setError('Incorrect username or password.');
+    }, 250);
   };
 
-  const handleSelectPersona = (p: typeof personas[0]) => {
-    quickLogin(p.role);
+  const signInAsDemo = (role: UserRole) => {
+    if (role === 'student') {
+      // Use the sample student if present, otherwise the first enrolled student.
+      if (accounts.some(a => a.id === 'acc-stu-01')) quickLogin('student');
+      else if (firstStudent) login(firstStudent.username, firstStudent.password);
+      return;
+    }
+    quickLogin(role);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col justify-between transition-colors">
-      
-      {/* Top Institutional Header */}
-      <header className="flex items-center justify-between px-4 sm:px-8 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xs sticky top-0 z-30">
-        <div className="flex items-center gap-3">
-          <img
-            src="/vrm-emblem.jpg"
-            alt="VRM IAS Academy Emblem"
-            className="w-10 h-10 rounded-full object-cover border border-amber-300 dark:border-amber-500/40 shadow-xs"
-          />
+    <div className="min-h-[100dvh] grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] bg-[#f6f7f9] dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+      {/* Brand panel: today's question, set like an exam paper */}
+      <section className="relative order-2 lg:order-1 bg-[#14213d] text-white px-6 py-10 sm:px-12 lg:px-16 lg:py-14 flex flex-col justify-between gap-10 overflow-hidden">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-24 -bottom-24 w-[28rem] h-[28rem] rounded-full border-[40px] border-[#e09f3e]/10"
+        />
+        <div className="hidden lg:flex items-center gap-3 relative">
+          <img src="/vrm-emblem.jpg" alt="" className="w-12 h-12 rounded-full object-cover ring-2 ring-[#e09f3e]/60" />
           <div>
-            <div className="flex items-center gap-2">
-              <span className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white">
-                VRM IAS ACADEMY
-              </span>
-              <span className="hidden sm:inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-300 border border-amber-200 dark:border-amber-900">
-                ERP Portal
-              </span>
-            </div>
-            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 block">
-              Premier Civil Services Training Institute · Chennai, Tamil Nadu
-            </span>
+            <p className="text-lg font-bold tracking-tight">VRM IAS Academy</p>
+            <p className="text-sm text-slate-300">Civil services coaching</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Light / Dark Mode Toggle */}
+        {question ? (
+          <figure className="relative max-w-xl">
+            <p className="text-sm text-[#e09f3e] font-semibold">Today's question, {todayLabel}</p>
+            <blockquote className="mt-4 font-['Source_Serif_4',Georgia,serif] text-xl sm:text-2xl leading-[1.45] text-slate-50 whitespace-pre-line">
+              {question.questionText}
+            </blockquote>
+            <figcaption className="mt-6 text-sm text-slate-300">
+              {question.subject}
+              {question.pyqYear ? `, ${question.pyqYear}` : ''}. Students can answer it after signing in.
+            </figcaption>
+          </figure>
+        ) : (
+          <p className="relative font-['Source_Serif_4',Georgia,serif] text-2xl leading-snug max-w-lg">
+            Admissions, classes, tests and fees for VRM IAS Academy in one place.
+          </p>
+        )}
+
+        <p className="relative text-xs text-slate-400">Demo build. Data is stored only in this browser.</p>
+      </section>
+
+      {/* Sign-in */}
+      <section className="order-1 lg:order-2 flex flex-col px-6 py-8 sm:px-12 lg:px-16">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 lg:invisible">
+            <img src="/vrm-emblem.jpg" alt="VRM IAS Academy" className="w-10 h-10 rounded-full object-cover ring-2 ring-[#e09f3e]/60" />
+            <span className="font-bold tracking-tight">VRM IAS Academy</span>
+          </div>
           <button
             onClick={toggleTheme}
-            className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
-            title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
-            aria-label="Toggle theme"
+            className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-white dark:hover:bg-slate-800 dark:hover:text-white"
+            aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
           >
             {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
           </button>
         </div>
-      </header>
 
-      {/* Main Sign-In Body */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 flex flex-col justify-center">
-        
-        {/* Title & Introduction */}
-        <div className="text-center max-w-2xl mx-auto mb-8 space-y-2.5">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 text-xs font-semibold">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Role-Based Access Control (RBAC) Architecture</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-            Sign In with Your Academy Role
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-            Click on any authorized role below for instant authenticated access to its tailored ERP workspace, or enter your credentials manually.
-          </p>
-        </div>
+        <div className="flex-1 flex flex-col justify-center w-full max-w-sm mx-auto py-10">
+          <h1 className="text-3xl font-extrabold tracking-tight">Sign in</h1>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Students use their roll number. Staff use their academy email.</p>
 
-        {/* 1-Click Persona RBAC Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {personas.map(p => (
-            <div
-              key={p.role}
-              onClick={() => handleSelectPersona(p)}
-              className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-2xs hover:shadow-md cursor-pointer transition-all flex flex-col justify-between space-y-4 group ${p.accentColor} ${p.bgAccent}`}
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                    {p.icon}
-                  </div>
-                  <span className={`text-[10px] font-mono uppercase font-bold px-2 py-0.5 rounded ${p.badgeColor}`}>
-                    {p.role.replace('_', ' ')}
-                  </span>
-                </div>
-
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
-                    {p.name}
-                  </h2>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                    {p.designation}
-                  </p>
-                </div>
-
-                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                  {p.accessSummary}
-                </p>
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
-                <div className="font-mono text-[11px] text-slate-400 dark:text-slate-500 truncate max-w-[170px]">
-                  {p.email}
-                </div>
-                <span className="inline-flex items-center gap-1 font-semibold text-slate-900 dark:text-amber-300 text-[11px] group-hover:translate-x-1 transition-transform">
-                  <span>Sign In</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </span>
-              </div>
-            </div>
-          ))}
-
-          {/* Form Card for Manual Credentials */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-2xs flex flex-col justify-between space-y-3">
+          <form onSubmit={handleSubmit} className="mt-8 space-y-4" noValidate>
             <div>
-              <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-800">
-                <KeyRound className="w-4 h-4 text-amber-500" />
-                <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                  Manual Sign-In Credentials
-                </h2>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-3 text-xs mt-3">
-                {errorMessage && (
-                  <div className="p-2 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 rounded text-rose-700 dark:text-rose-300 text-[11px]">
-                    {errorMessage}
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">
-                    Username / Email / Student Roll ID
-                  </label>
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={e => setUsername(e.target.value)}
-                    placeholder="e.g. director@vrmiasacademy.in or VRM-2026-089"
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-
+              <label htmlFor="login-user" className="block text-sm font-semibold mb-1.5">
+                Roll number or email
+              </label>
+              <input
+                id="login-user"
+                type="text"
+                autoComplete="username"
+                value={username}
+                onChange={e => {
+                  setUsername(e.target.value);
+                  setError('');
+                }}
+                placeholder="VRM-2026-001 or name@vrmiasacademy.in"
+                className="w-full h-11 px-3.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#e09f3e] focus:border-[#e09f3e]"
+              />
+            </div>
+            <div>
+              <label htmlFor="login-pass" className="block text-sm font-semibold mb-1.5">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  id="login-pass"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={e => {
+                    setPassword(e.target.value);
+                    setError('');
+                  }}
+                  className="w-full h-11 pl-3.5 pr-11 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#e09f3e] focus:border-[#e09f3e]"
+                />
                 <button
-                  type="submit"
-                  className="w-full py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-amber-600 dark:hover:bg-amber-500 rounded-lg transition-colors shadow-xs"
+                  type="button"
+                  onClick={() => setShowPassword(s => !s)}
+                  className="absolute right-1.5 top-1.5 w-8 h-8 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
-                  Authenticate & Launch Session
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
-              </form>
+              </div>
             </div>
 
-            <div className="pt-2 text-[10px] text-slate-400 dark:text-slate-500">
-              Demo passwords: <code className="font-mono text-slate-700 dark:text-slate-300">admin123</code>, <code className="font-mono text-slate-700 dark:text-slate-300">office123</code>, <code className="font-mono text-slate-700 dark:text-slate-300">faculty123</code>, <code className="font-mono text-slate-700 dark:text-slate-300">agent123</code>, <code className="font-mono text-slate-700 dark:text-slate-300">student123</code>.
-              Newly admitted students sign in with their roll number and <code className="font-mono text-slate-700 dark:text-slate-300">VRM@</code> + last 4 digits of their phone.
+            {error && (
+              <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={busy}
+              className="w-full h-11 rounded-lg bg-[#14213d] dark:bg-[#e09f3e] text-white dark:text-slate-950 text-sm font-bold hover:bg-[#1d2f55] dark:hover:bg-[#eab05a] disabled:opacity-70 inline-flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#e09f3e]"
+            >
+              {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+              Sign in
+            </button>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              New students get their password at admission: <span className="font-mono">VRM@</span> followed by the last 4 digits of their
+              phone number.
+            </p>
+          </form>
+
+          <div className="mt-10 pt-6 border-t border-slate-200 dark:border-slate-800">
+            <p className="text-sm font-semibold">Try a demo account</p>
+            <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {DEMO_ACCOUNTS.map(acc => {
+                const disabled = acc.role === 'student' && !firstStudent;
+                return (
+                  <button
+                    key={acc.role}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => signInAsDemo(acc.role)}
+                    title={disabled ? 'No students yet. Enroll one or load sample data first.' : `Sign in as ${acc.label}`}
+                    className="text-left px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-[#e09f3e] disabled:opacity-45 disabled:hover:border-slate-200 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#e09f3e]"
+                  >
+                    <span className="block text-sm font-semibold">{acc.label}</span>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400">{acc.who}</span>
+                  </button>
+                );
+              })}
             </div>
+            {!hasActivityData && (
+              <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+                The academy has no students yet.{' '}
+                <button type="button" onClick={loadSampleData} className="font-semibold text-[#b67812] dark:text-[#e09f3e] underline underline-offset-2">
+                  Load sample data
+                </button>{' '}
+                to explore with about 200 students, or sign in as Office and enroll your own.
+              </p>
+            )}
           </div>
         </div>
-
-        {/* Toggleable RBAC Permissions Matrix */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-2xs">
-          <button
-            onClick={() => setShowRbacMatrix(!showRbacMatrix)}
-            className="w-full px-5 py-3.5 flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <Table className="w-4 h-4 text-amber-500" />
-              <span>Compare Academy RBAC Permissions Matrix</span>
-              <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500 hidden sm:inline">
-                (View module access rules across all 5 roles)
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 text-slate-400">
-              <span className="text-[11px] font-medium">{showRbacMatrix ? 'Hide Details' : 'Expand Matrix'}</span>
-              {showRbacMatrix ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </div>
-          </button>
-
-          {showRbacMatrix && (
-            <div className="border-t border-slate-200 dark:border-slate-800 overflow-x-auto p-4">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
-                    <th className="py-2.5 px-3 font-semibold">ERP System Capability</th>
-                    <th className="py-2.5 px-2 font-semibold text-center text-amber-700 dark:text-amber-400">Management</th>
-                    <th className="py-2.5 px-2 font-semibold text-center text-blue-700 dark:text-blue-400">Office / Registrar</th>
-                    <th className="py-2.5 px-2 font-semibold text-center text-emerald-700 dark:text-emerald-400">Faculty</th>
-                    <th className="py-2.5 px-2 font-semibold text-center text-indigo-700 dark:text-indigo-400">Student Aspirant</th>
-                    <th className="py-2.5 px-2 font-semibold text-center text-rose-700 dark:text-rose-400">Field Outreach</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                  {rbacMatrix.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                      <td className="py-2 px-3 font-medium text-slate-800 dark:text-slate-200">{row.module}</td>
-                      <td className="py-2 px-2 text-center">
-                        {row.mgmt ? <CheckCircle2 className="w-4 h-4 text-emerald-500 mx-auto" /> : <XCircle className="w-4 h-4 text-slate-300 dark:text-slate-700 mx-auto" />}
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        {row.office ? <CheckCircle2 className="w-4 h-4 text-emerald-500 mx-auto" /> : <XCircle className="w-4 h-4 text-slate-300 dark:text-slate-700 mx-auto" />}
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        {row.faculty ? <CheckCircle2 className="w-4 h-4 text-emerald-500 mx-auto" /> : <XCircle className="w-4 h-4 text-slate-300 dark:text-slate-700 mx-auto" />}
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        {row.student ? <CheckCircle2 className="w-4 h-4 text-emerald-500 mx-auto" /> : <XCircle className="w-4 h-4 text-slate-300 dark:text-slate-700 mx-auto" />}
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        {row.agent ? <CheckCircle2 className="w-4 h-4 text-emerald-500 mx-auto" /> : <XCircle className="w-4 h-4 text-slate-300 dark:text-slate-700 mx-auto" />}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-      </main>
-
-      {/* Footer */}
-      <footer className="py-4 px-6 border-t border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400 dark:text-slate-500">
-        VRM IAS Academy Enterprise Portal · Protected by Role-Based Access Control · Chennai, Tamil Nadu
-      </footer>
-
+      </section>
     </div>
   );
 };

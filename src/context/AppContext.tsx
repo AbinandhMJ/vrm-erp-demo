@@ -24,7 +24,8 @@ import {
   SupportTicket,
   UserAccount,
   UserProfile,
-  UserRole
+  UserRole,
+  DailyQuizAttempt
 } from '../types';
 import {
   INITIAL_ANNOUNCEMENTS,
@@ -36,7 +37,8 @@ import {
   INITIAL_STUDY_MATERIALS,
   INITIAL_TICKETS
 } from '../data/mockData';
-import { buildSeed, DEMO_PERSONA_ACCOUNT_IDS, SeedData, studentDefaultPassword } from '../data/seed';
+import { buildBaseData, buildSeed, DEMO_PERSONA_ACCOUNT_IDS, SeedData, studentDefaultPassword } from '../data/seed';
+import { pickDailyQuestions } from '../lib/dailyQuiz';
 import { canAccess, HOME_TAB } from '../config/access';
 import { nowDisplay, todayISO } from '../lib/dates';
 import {
@@ -188,7 +190,16 @@ interface AppContextType {
   updateTicketStatus: (ticketId: string, status: SupportTicket['status']) => void;
   addStaffMember: (staff: Omit<StaffMember, 'id' | 'attendanceRate'>) => { staff: StaffMember; credentials: Credentials };
   markStaffAttendance: (date: string, entries: { staffId: string; status: StaffAttendanceEntry['status'] }[]) => void;
+  /** Clears everything back to the empty starting state (logins, staff, courses, batches, timetable, question bank). */
   resetToDefaultData: () => void;
+  /** Replaces all data with the generated sample academy (~200 students, 6 months of activity). */
+  loadSampleData: () => void;
+  hasActivityData: boolean;
+
+  // Daily quiz
+  dailyQuizAttempts: DailyQuizAttempt[];
+  todaysQuiz: Question[];
+  submitDailyQuiz: (answers: Record<string, number>) => DailyQuizAttempt | null;
 
   // Modals & UI helpers
   activeModal: { type: string; data?: any } | null;
@@ -202,11 +213,12 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Bumped from the v1 prefix so browsers holding the old data shape start fresh.
-const STORAGE_PREFIX = 'vrm_erp_v2_';
+// Bumped (v3) so browsers still holding the old pre-filled sample data start empty.
+const STORAGE_PREFIX = 'vrm_erp_v3_';
 
-let cachedSeed: SeedData | null = null;
-const getSeed = (): SeedData => (cachedSeed ??= buildSeed());
+// First open starts from the base data (logins, staff, courses, batches, timetable, question bank).
+let cachedBase: SeedData | null = null;
+const getBase = (): SeedData => (cachedBase ??= buildBaseData());
 
 function loadFromStorage<T>(key: string, fallback: () => T): T {
   try {
@@ -257,7 +269,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const today = todayISO();
 
   // ---------- auth ----------
-  const [accounts, setAccounts] = usePersistentState<UserAccount[]>('accounts', () => getSeed().accounts);
+  const [accounts, setAccounts] = usePersistentState<UserAccount[]>('accounts', () => getBase().accounts);
   const [currentAccountId, setCurrentAccountId] = usePersistentState<string | null>('current_account', () => null);
 
   // ---------- UI ----------
@@ -272,23 +284,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ---------- data ----------
   const [coursesRaw, setCourses] = usePersistentState<Course[]>('courses', () => INITIAL_COURSES);
   const [batchesRaw, setBatches] = usePersistentState<Batch[]>('batches', () => INITIAL_BATCHES);
-  const [counselorsRaw, setCounselors] = usePersistentState<Counselor[]>('counselors', () => getSeed().counselors);
-  const [leads, setLeads] = usePersistentState<Lead[]>('leads', () => getSeed().leads);
-  const [studentsRaw, setStudents] = usePersistentState<Student[]>('students', () => getSeed().students);
-  const [invoicesRaw, setInvoices] = usePersistentState<Invoice[]>('invoices', () => getSeed().invoices);
-  const [receipts, setReceipts] = usePersistentState<PaymentReceipt[]>('receipts', () => getSeed().receipts);
+  const [counselorsRaw, setCounselors] = usePersistentState<Counselor[]>('counselors', () => getBase().counselors);
+  const [leads, setLeads] = usePersistentState<Lead[]>('leads', () => getBase().leads);
+  const [studentsRaw, setStudents] = usePersistentState<Student[]>('students', () => getBase().students);
+  const [invoicesRaw, setInvoices] = usePersistentState<Invoice[]>('invoices', () => getBase().invoices);
+  const [receipts, setReceipts] = usePersistentState<PaymentReceipt[]>('receipts', () => getBase().receipts);
   const [schedule, setSchedule] = usePersistentState<ClassScheduleItem[]>('schedule', () => INITIAL_SCHEDULE);
-  const [attendance, setAttendance] = usePersistentState<AttendanceSession[]>('attendance', () => getSeed().attendance);
-  const [materials, setMaterials] = usePersistentState<StudyMaterial[]>('materials', () => INITIAL_STUDY_MATERIALS);
-  const [assessmentTests, setAssessmentTests] = usePersistentState<AssessmentTest[]>('assessmentTests', () => getSeed().assessmentTests);
+  const [attendance, setAttendance] = usePersistentState<AttendanceSession[]>('attendance', () => getBase().attendance);
+  const [materials, setMaterials] = usePersistentState<StudyMaterial[]>('materials', () => []);
+  const [assessmentTests, setAssessmentTests] = usePersistentState<AssessmentTest[]>('assessmentTests', () => getBase().assessmentTests);
   const [questionBank, setQuestionBank] = usePersistentState<Question[]>('questionBank', () => INITIAL_QUESTION_BANK);
-  const [studentAttempts, setStudentAttempts] = usePersistentState<StudentTestAttempt[]>('studentAttempts', () => getSeed().studentAttempts);
-  const [staffRaw, setStaffMembers] = usePersistentState<StaffMember[]>('staffMembers', () => getSeed().staffMembers);
-  const [staffAttendance, setStaffAttendance] = usePersistentState<StaffAttendanceEntry[]>('staffAttendance', () => getSeed().staffAttendance);
-  const [salaryPayouts, setSalaryPayouts] = usePersistentState<SalaryPayout[]>('salaryPayouts', () => getSeed().salaryPayouts);
-  const [examAlerts, setExamAlerts] = usePersistentState<ExamAlert[]>('examAlerts', () => INITIAL_EXAM_ALERTS);
-  const [announcements, setAnnouncements] = usePersistentState<AcademyAnnouncement[]>('announcements', () => INITIAL_ANNOUNCEMENTS);
-  const [tickets, setTickets] = usePersistentState<SupportTicket[]>('tickets', () => INITIAL_TICKETS);
+  const [studentAttempts, setStudentAttempts] = usePersistentState<StudentTestAttempt[]>('studentAttempts', () => getBase().studentAttempts);
+  const [staffRaw, setStaffMembers] = usePersistentState<StaffMember[]>('staffMembers', () => getBase().staffMembers);
+  const [staffAttendance, setStaffAttendance] = usePersistentState<StaffAttendanceEntry[]>('staffAttendance', () => getBase().staffAttendance);
+  const [salaryPayouts, setSalaryPayouts] = usePersistentState<SalaryPayout[]>('salaryPayouts', () => getBase().salaryPayouts);
+  const [examAlerts, setExamAlerts] = usePersistentState<ExamAlert[]>('examAlerts', () => []);
+  const [announcements, setAnnouncements] = usePersistentState<AcademyAnnouncement[]>('announcements', () => []);
+  const [tickets, setTickets] = usePersistentState<SupportTicket[]>('tickets', () => []);
+  const [dailyQuizAttempts, setDailyQuizAttempts] = usePersistentState<DailyQuizAttempt[]>('dailyQuizAttempts', () => []);
 
   // ---------- identity ----------
   const currentAccount = useMemo(
@@ -930,37 +943,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  // ---------- reset ----------
-  const resetToDefaultData = () => {
+  // ---------- data reset / sample data ----------
+  const applyData = (data: SeedData, withContent: boolean) => {
     clearOwnStorage();
-    cachedSeed = buildSeed();
-    const seed = cachedSeed;
-    setAccounts(seed.accounts);
+    setAccounts(data.accounts);
     setCourses(INITIAL_COURSES);
     setBatches(INITIAL_BATCHES);
-    setCounselors(seed.counselors);
-    setLeads(seed.leads);
-    setStudents(seed.students);
-    setInvoices(seed.invoices);
-    setReceipts(seed.receipts);
+    setCounselors(data.counselors);
+    setLeads(data.leads);
+    setStudents(data.students);
+    setInvoices(data.invoices);
+    setReceipts(data.receipts);
     setSchedule(INITIAL_SCHEDULE);
-    setAttendance(seed.attendance);
-    setMaterials(INITIAL_STUDY_MATERIALS);
-    setAssessmentTests(seed.assessmentTests);
+    setAttendance(data.attendance);
+    setMaterials(withContent ? INITIAL_STUDY_MATERIALS : []);
+    setAssessmentTests(data.assessmentTests);
     setQuestionBank(INITIAL_QUESTION_BANK);
-    setStudentAttempts(seed.studentAttempts);
-    setStaffMembers(seed.staffMembers);
-    setStaffAttendance(seed.staffAttendance);
-    setSalaryPayouts(seed.salaryPayouts);
-    setExamAlerts(INITIAL_EXAM_ALERTS);
-    setAnnouncements(INITIAL_ANNOUNCEMENTS);
-    setTickets(INITIAL_TICKETS);
-    setTheme('light');
-    // Stay signed in as the same account if it still exists after the reset.
-    const stillExists = seed.accounts.find(a => a.id === currentAccountId);
-    const account = stillExists || seed.accounts.find(a => a.id === DEMO_PERSONA_ACCOUNT_IDS.management)!;
-    setCurrentAccountId(account.id);
-    setActiveTabRaw(HOME_TAB[account.role]);
+    setStudentAttempts(data.studentAttempts);
+    setStaffMembers(data.staffMembers);
+    setStaffAttendance(data.staffAttendance);
+    setSalaryPayouts(data.salaryPayouts);
+    setExamAlerts(withContent ? INITIAL_EXAM_ALERTS : []);
+    setAnnouncements(withContent ? INITIAL_ANNOUNCEMENTS : []);
+    setTickets(withContent ? INITIAL_TICKETS : []);
+    setDailyQuizAttempts(data.dailyQuizAttempts);
+    setTheme(theme);
+    // Stay signed in as the same account if it still exists; otherwise fall back to management.
+    if (currentAccountId) {
+      const stillExists = data.accounts.find(a => a.id === currentAccountId);
+      const account = stillExists || data.accounts.find(a => a.id === DEMO_PERSONA_ACCOUNT_IDS.management)!;
+      setCurrentAccountId(account.id);
+      setActiveTabRaw(HOME_TAB[account.role]);
+    }
+  };
+
+  const resetToDefaultData = () => applyData(buildBaseData(), false);
+  const loadSampleData = () => applyData(buildSeed(), true);
+  const hasActivityData = studentsRaw.length > 0 || leads.length > 0;
+
+  // ---------- daily quiz ----------
+  const todaysQuiz = useMemo(() => pickDailyQuestions(questionBank, today), [questionBank, today]);
+  const submitDailyQuiz = (answers: Record<string, number>): DailyQuizAttempt | null => {
+    const studentId = currentAccount?.linkedStudentId;
+    if (!studentId || todaysQuiz.length === 0) return null;
+    const correct = todaysQuiz.filter(q => answers[q.id] === q.correctOptionIndex).length;
+    const attempt: DailyQuizAttempt = {
+      id: `dq-${studentId}-${today}`,
+      studentId,
+      date: today,
+      questionIds: todaysQuiz.map(q => q.id),
+      answers,
+      correct,
+      total: todaysQuiz.length
+    };
+    setDailyQuizAttempts(prev => [...prev.filter(a => a.id !== attempt.id), attempt]);
+    return attempt;
   };
 
   const notificationCount = visibleExamAlerts.filter(a => a.status === 'active').length + visibleAnnouncements.length;
@@ -1035,6 +1072,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addStaffMember,
         markStaffAttendance,
         resetToDefaultData,
+        loadSampleData,
+        hasActivityData,
+        dailyQuizAttempts,
+        todaysQuiz,
+        submitDailyQuiz,
         activeModal,
         openModal,
         closeModal,

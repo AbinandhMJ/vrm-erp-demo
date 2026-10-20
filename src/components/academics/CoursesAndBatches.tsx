@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { Modal } from '../common/Modal';
 import { Course, Batch } from '../../types';
 import {
   Layers,
@@ -272,220 +273,204 @@ export const CoursesAndBatches: React.FC = () => {
 
       {/* Add Course Modal */}
       {isAddCourseOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Add New Academic Course</h3>
-              <button onClick={() => setIsAddCourseOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+        <Modal title="Add New Academic Course" onClose={() => setIsAddCourseOpen(false)} size="md" bodyClassName="px-5 py-4 space-y-4">
 
-            <form onSubmit={handleCreateCourse} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Course Title *</label>
-                <input
-                  type="text"
-                  value={newCourseName}
-                  onChange={e => setNewCourseName(e.target.value)}
-                  placeholder="e.g. UPSC CSE 2027 Two-Year Foundation"
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Course Code</label>
-                  <input
-                    type="text"
-                    value={newCourseCode}
-                    onChange={e => setNewCourseCode(e.target.value)}
-                    placeholder="UPSC-2YR-27"
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Category</label>
-                  <select
-                    value={newCourseCategory}
-                    onChange={e => setNewCourseCategory(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  >
-                    <option value="GS Foundation">GS Foundation</option>
-                    <option value="Optional Subject">Optional Subject</option>
-                    <option value="CSAT">CSAT</option>
-                    <option value="Test Series">Test Series</option>
-                    <option value="State PSC">State PSC</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Duration (Months)</label>
-                  <input
-                    type="number"
-                    value={newCourseDuration}
-                    onChange={e => setNewCourseDuration(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tuition Fee (₹)</label>
-                  <input
-                    type="number"
-                    value={newCourseFee}
-                    onChange={e => setNewCourseFee(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Description</label>
-                <textarea
-                  rows={2}
-                  value={newCourseDesc}
-                  onChange={e => setNewCourseDesc(e.target.value)}
-                  placeholder="Comprehensive coverage overview..."
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Syllabus Highlights (comma-separated)</label>
-                <input
-                  type="text"
-                  value={newCourseHighlights}
-                  onChange={e => setNewCourseHighlights(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsAddCourseOpen(false)}
-                  className="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 font-semibold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg"
-                >
-                  Save Course
-                </button>
-              </div>
-            </form>
+        <form onSubmit={handleCreateCourse} className="space-y-3 text-xs">
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Course Title *</label>
+            <input
+              type="text"
+              value={newCourseName}
+              onChange={e => setNewCourseName(e.target.value)}
+              placeholder="e.g. UPSC CSE 2027 Two-Year Foundation"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              required
+            />
           </div>
-        </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Course Code</label>
+              <input
+                type="text"
+                value={newCourseCode}
+                onChange={e => setNewCourseCode(e.target.value)}
+                placeholder="UPSC-2YR-27"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+                required
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Category</label>
+              <select
+                value={newCourseCategory}
+                onChange={e => setNewCourseCategory(e.target.value as any)}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              >
+                <option value="GS Foundation">GS Foundation</option>
+                <option value="Optional Subject">Optional Subject</option>
+                <option value="CSAT">CSAT</option>
+                <option value="Test Series">Test Series</option>
+                <option value="State PSC">State PSC</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Duration (Months)</label>
+              <input
+                type="number"
+                value={newCourseDuration}
+                onChange={e => setNewCourseDuration(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tuition Fee (₹)</label>
+              <input
+                type="number"
+                value={newCourseFee}
+                onChange={e => setNewCourseFee(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Description</label>
+            <textarea
+              rows={2}
+              value={newCourseDesc}
+              onChange={e => setNewCourseDesc(e.target.value)}
+              placeholder="Comprehensive coverage overview..."
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Syllabus Highlights (comma-separated)</label>
+            <input
+              type="text"
+              value={newCourseHighlights}
+              onChange={e => setNewCourseHighlights(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setIsAddCourseOpen(false)}
+              className="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-1.5 font-semibold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg"
+            >
+              Save Course
+            </button>
+          </div>
+        </form>
+        </Modal>
       )}
 
       {/* Add Batch Modal */}
       {isAddBatchOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Create New Classroom Batch</h3>
-              <button onClick={() => setIsAddBatchOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+        <Modal title="Create New Classroom Batch" onClose={() => setIsAddBatchOpen(false)} size="md" bodyClassName="px-5 py-4 space-y-4">
 
-            <form onSubmit={handleCreateBatch} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Batch Name *</label>
-                <input
-                  type="text"
-                  value={newBatchName}
-                  onChange={e => setNewBatchName(e.target.value)}
-                  placeholder="e.g. Morning Regular Batch (Gamma-26)"
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Associated Course</label>
-                <select
-                  value={newBatchCourseId}
-                  onChange={e => setNewBatchCourseId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                >
-                  {courses.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Timing</label>
-                  <input
-                    type="text"
-                    value={newBatchTiming}
-                    onChange={e => setNewBatchTiming(e.target.value)}
-                    placeholder="07:30 AM – 10:30 AM"
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Classroom / Room</label>
-                  <input
-                    type="text"
-                    value={newBatchRoom}
-                    onChange={e => setNewBatchRoom(e.target.value)}
-                    placeholder="Hall 101"
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Max Seating Capacity</label>
-                  <input
-                    type="number"
-                    value={newBatchCapacity}
-                    onChange={e => setNewBatchCapacity(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Lead Faculty Mentor</label>
-                  <select
-                    value={newBatchFacultyId}
-                    onChange={e => setNewBatchFacultyId(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  >
-                    {staffMembers.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.department})</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsAddBatchOpen(false)}
-                  className="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 font-semibold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg"
-                >
-                  Create Batch
-                </button>
-              </div>
-            </form>
+        <form onSubmit={handleCreateBatch} className="space-y-3 text-xs">
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Batch Name *</label>
+            <input
+              type="text"
+              value={newBatchName}
+              onChange={e => setNewBatchName(e.target.value)}
+              placeholder="e.g. Morning Regular Batch (Gamma-26)"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              required
+            />
           </div>
-        </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Associated Course</label>
+            <select
+              value={newBatchCourseId}
+              onChange={e => setNewBatchCourseId(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+            >
+              {courses.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Timing</label>
+              <input
+                type="text"
+                value={newBatchTiming}
+                onChange={e => setNewBatchTiming(e.target.value)}
+                placeholder="07:30 AM – 10:30 AM"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Classroom / Room</label>
+              <input
+                type="text"
+                value={newBatchRoom}
+                onChange={e => setNewBatchRoom(e.target.value)}
+                placeholder="Hall 101"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Max Seating Capacity</label>
+              <input
+                type="number"
+                value={newBatchCapacity}
+                onChange={e => setNewBatchCapacity(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Lead Faculty Mentor</label>
+              <select
+                value={newBatchFacultyId}
+                onChange={e => setNewBatchFacultyId(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              >
+                {staffMembers.map(s => (
+                  <option key={s.id} value={s.id}>{s.name} ({s.department})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setIsAddBatchOpen(false)}
+              className="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-1.5 font-semibold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg"
+            >
+              Create Batch
+            </button>
+          </div>
+        </form>
+        </Modal>
       )}
 
     </div>

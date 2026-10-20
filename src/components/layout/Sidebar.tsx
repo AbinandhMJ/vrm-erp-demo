@@ -251,7 +251,7 @@ export const Sidebar: React.FC = () => {
     <>
       {/* Desktop Persistent Sidebar */}
       <aside
-        className={`hidden lg:flex flex-col shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-200 ${
+        className={`app-sidebar hidden lg:flex flex-col shrink-0 h-full overflow-y-auto bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-200 ${
           isSidebarCollapsed ? 'w-16' : 'w-64'
         }`}
       >

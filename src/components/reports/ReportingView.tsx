@@ -1,6 +1,8 @@
 import { printLight } from '../../lib/print';
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { BarsChart, LinesChart, lakhs, pct } from '../charts/Charts';
+import { bands, weeklyAttendance } from '../../lib/metrics';
 import {
   FileText,
   Printer,
@@ -18,7 +20,9 @@ export const ReportingView: React.FC = () => {
     students,
     batches,
     courses,
-    invoices
+    invoices,
+    attendance,
+    today
   } = useApp();
 
   const [reportType, setReportType] = useState<'progress' | 'attendance' | 'finance'>('progress');
@@ -40,6 +44,31 @@ export const ReportingView: React.FC = () => {
     : 0;
 
   const lowAttendanceStudents = filteredStudents.filter(s => s.attendancePercentage < 75);
+
+  // ---------- chart data ----------
+  const tested = filteredStudents.filter(s => s.averageTestScore > 0);
+  const scoreBands = bands(tested.map(s => s.averageTestScore));
+  const attendanceBands = bands(filteredStudents.map(s => s.attendancePercentage));
+  const feeBands = bands(
+    filteredStudents.map(s => (s.netFee ? (s.paidFee / s.netFee) * 100 : 100)),
+    [0, 25, 50, 75, 100, 101],
+    ['Under 25%', '25–49%', '50–74%', '75–99%', 'Fully paid']
+  );
+  const batchesInScope = selectedBatchId === 'all' ? batches : batches.filter(b => b.id === selectedBatchId);
+  const batchRows = batchesInScope.map(b => {
+    const roster = students.filter(s => s.enrolledBatchId === b.id);
+    const t = roster.filter(s => s.averageTestScore > 0);
+    return {
+      batch: b.name.replace(/\s*\(.*\)$/, ''),
+      score: t.length ? Math.round(t.reduce((sum, s) => sum + s.averageTestScore, 0) / t.length) : 0,
+      collected: roster.reduce((sum, s) => sum + s.paidFee, 0),
+      outstanding: roster.reduce((sum, s) => sum + s.balanceFee, 0)
+    };
+  });
+  const attendanceTrend = weeklyAttendance(attendance, students, today, 12, selectedBatchId === 'all' ? undefined : selectedBatchId);
+  const chartBox = 'border border-slate-200 rounded-lg p-4 break-inside-avoid';
+  const chartTitle = 'text-xs font-bold text-slate-800 mb-2';
+  const noData = <div className="h-40 flex items-center justify-center text-xs text-slate-400">No data for this selection yet.</div>;
 
   const handlePrint = () => {
     printLight();
@@ -174,6 +203,69 @@ export const ReportingView: React.FC = () => {
               {lowAttendanceStudents.length} Aspirants
             </span>
           </div>
+        </div>
+
+        {/* Charts for the selected report */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {reportType === 'progress' && (
+            <>
+              <div className={chartBox}>
+                <p className={chartTitle}>Students by average test score</p>
+                {tested.length ? <BarsChart light height={220} data={scoreBands} xKey="band" series={[{ key: 'students', label: 'Students' }]} /> : noData}
+              </div>
+              <div className={chartBox}>
+                <p className={chartTitle}>Average test score by batch</p>
+                {batchRows.some(r => r.score) ? (
+                  <BarsChart light horizontal height={220} data={batchRows} xKey="batch" series={[{ key: 'score', label: 'Average score' }]} formatValue={pct} yMax={100} />
+                ) : (
+                  noData
+                )}
+              </div>
+            </>
+          )}
+          {reportType === 'attendance' && (
+            <>
+              <div className={chartBox}>
+                <p className={chartTitle}>Weekly attendance, last 12 weeks</p>
+                {attendanceTrend.some(r => r.attendance !== null) ? (
+                  <LinesChart light height={220} data={attendanceTrend} xKey="week" series={[{ key: 'attendance', label: 'Attendance' }]} formatValue={pct} yMax={100} />
+                ) : (
+                  noData
+                )}
+              </div>
+              <div className={chartBox}>
+                <p className={chartTitle}>Students by attendance</p>
+                {filteredStudents.length ? <BarsChart light height={220} data={attendanceBands} xKey="band" series={[{ key: 'students', label: 'Students' }]} /> : noData}
+              </div>
+            </>
+          )}
+          {reportType === 'finance' && (
+            <>
+              <div className={chartBox}>
+                <p className={chartTitle}>Collected and outstanding by batch</p>
+                {batchRows.some(r => r.collected || r.outstanding) ? (
+                  <BarsChart
+                    light
+                    horizontal
+                    height={240}
+                    data={batchRows}
+                    xKey="batch"
+                    series={[
+                      { key: 'collected', label: 'Collected' },
+                      { key: 'outstanding', label: 'Outstanding' }
+                    ]}
+                    formatValue={lakhs}
+                  />
+                ) : (
+                  noData
+                )}
+              </div>
+              <div className={chartBox}>
+                <p className={chartTitle}>Students by share of fee paid</p>
+                {filteredStudents.length ? <BarsChart light height={240} data={feeBands} xKey="band" series={[{ key: 'students', label: 'Students' }]} /> : noData}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Progress Report Table */}

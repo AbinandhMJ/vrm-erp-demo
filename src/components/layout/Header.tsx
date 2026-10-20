@@ -36,14 +36,26 @@ export const Header: React.FC = () => {
     notificationCount,
     visibleExamAlerts: examAlerts,
     visibleAnnouncements: announcements,
-    resetToDefaultData
+    resetToDefaultData,
+    loadSampleData,
+    hasActivityData
   } = useApp();
+
+  const [isDataMenuOpen, setIsDataMenuOpen] = useState(false);
+  const canManageData = role === 'management' || role === 'office_staff';
+  const confirmLoadSample = () => {
+    if (window.confirm('Replace all current data with the sample academy (about 200 students and 6 months of activity)?')) loadSampleData();
+  };
+  const confirmClear = () => {
+    if (window.confirm('Delete all students, leads, fees, attendance and other records? Logins, staff, courses, batches and the timetable are kept.'))
+      resetToDefaultData();
+  };
 
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 transition-colors">
+    <header className="app-header shrink-0 relative z-40 w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 transition-colors">
       <div className="flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-6 py-2.5">
         
         {/* Left Zone: Mobile Toggle + Sidebar Toggle + Academy Crest & Wordmark */}
@@ -196,18 +208,43 @@ export const Header: React.FC = () => {
             )}
           </div>
 
-          {/* Reset Demo Data button */}
-          <button
-            onClick={() => {
-              if (window.confirm('Reset VRM IAS Academy ERP to original demo data?')) {
-                resetToDefaultData();
-              }
-            }}
-            title="Reset to fresh demo data"
-            className="hidden sm:inline-flex p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
+          {/* Demo data menu (admins only) */}
+          {canManageData && (
+            <div className="relative hidden sm:block">
+              <button
+                onClick={() => setIsDataMenuOpen(o => !o)}
+                title="Demo data"
+                className="inline-flex p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+              {isDataMenuOpen && (
+                <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 py-2 z-50 text-xs">
+                  <div className="px-4 pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Demo data (this browser only)</div>
+                  <button
+                    onClick={() => {
+                      setIsDataMenuOpen(false);
+                      confirmLoadSample();
+                    }}
+                    className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200"
+                  >
+                    <span className="font-semibold block">Load sample data</span>
+                    <span className="text-slate-500">Fill the app with a sample academy</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsDataMenuOpen(false);
+                      confirmClear();
+                    }}
+                    className="w-full text-left px-4 py-2 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-700 dark:text-rose-400"
+                  >
+                    <span className="font-semibold block">Clear all data</span>
+                    <span className="text-slate-500">{hasActivityData ? 'Start again from empty' : 'Already empty'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Quick Switch Role / Sign Out Button */}
           <button
@@ -257,16 +294,30 @@ export const Header: React.FC = () => {
                 </div>
 
                 <div className="pt-1">
-                  <button
-                    onClick={() => {
-                      setIsUserDropdownOpen(false);
-                      if (window.confirm('Reset VRM IAS Academy ERP to original demo data?')) resetToDefaultData();
-                    }}
-                    className="sm:hidden w-full px-4 py-2 text-xs flex items-center gap-2 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left font-medium"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Reset Demo Data</span>
-                  </button>
+                  {canManageData && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setIsUserDropdownOpen(false);
+                          confirmLoadSample();
+                        }}
+                        className="sm:hidden w-full px-4 py-2 text-xs flex items-center gap-2 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left font-medium"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Load sample data</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsUserDropdownOpen(false);
+                          confirmClear();
+                        }}
+                        className="sm:hidden w-full px-4 py-2 text-xs flex items-center gap-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors text-left font-medium"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Clear all data</span>
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={() => {
                       setIsUserDropdownOpen(false);

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { Modal } from '../common/Modal';
 import { Lead, ScholarshipType, PaymentPlanType, PaymentReceipt } from '../../types';
 import { computeDiscount } from '../../lib/fees';
 import {
@@ -147,59 +148,47 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
   const selectedBatchObj = batches.find(b => b.id === selectedBatchId);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="relative w-full max-w-3xl bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-6">
-        
-        {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center">
-              <UserCheck className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-white">
-                {initialLead ? `Convert Lead: ${initialLead.studentName}` : 'New Student Admission & Enrollment'}
-              </h3>
-              <p className="text-xs text-slate-400">
-                Course Selection · Custom Fee Structure · Payment Gateway & Auto-Provisioning
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-md hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+    <Modal
+      title={initialLead ? `Admit: ${initialLead.studentName}` : 'New Student Admission'}
+      subtitle="Student details · Fee plan · Payment & portal login"
+      icon={
+        <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center">
+          <UserCheck className="w-4 h-4" />
         </div>
-
+      }
+      headerTone="dark"
+      onClose={onClose}
+      size="xl"
+      bodyClassName="p-0"
+      dismissible={!isProcessing}
+    >
         {/* Wizard Step Progress */}
-        <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 px-6 py-3 text-xs">
+        <div className="sticky top-0 z-10 flex flex-wrap gap-y-1 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-4 sm:px-6 py-3 text-xs">
           <div className={`flex items-center gap-2 font-medium ${step === 1 ? 'text-amber-800 dark:text-amber-300 font-bold' : 'text-slate-500 dark:text-slate-400'}`}>
             <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${step === 1 ? 'bg-amber-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}>
               1
             </span>
-            <span>Student & Batch Details</span>
+            <span className="hidden sm:inline">Student & Batch Details</span>
           </div>
-          <div className="mx-4 text-slate-300 dark:text-slate-700">/</div>
+          <div className="mx-2 sm:mx-4 text-slate-300 dark:text-slate-700">/</div>
           <div className={`flex items-center gap-2 font-medium ${step === 2 ? 'text-amber-800 dark:text-amber-300 font-bold' : 'text-slate-500 dark:text-slate-400'}`}>
             <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${step === 2 ? 'bg-amber-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}>
               2
             </span>
-            <span>Fee Structure & Payment</span>
+            <span className="hidden sm:inline">Fee Structure & Payment</span>
           </div>
-          <div className="mx-4 text-slate-300 dark:text-slate-700">/</div>
+          <div className="mx-2 sm:mx-4 text-slate-300 dark:text-slate-700">/</div>
           <div className={`flex items-center gap-2 font-medium ${step === 3 ? 'text-emerald-700 dark:text-emerald-400 font-bold' : 'text-slate-500 dark:text-slate-400'}`}>
             <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${step === 3 ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}>
               3
             </span>
-            <span>Roster & Digital Receipt</span>
+            <span className="hidden sm:inline">Roster & Digital Receipt</span>
           </div>
         </div>
 
         {/* Step 1: Student Information & Course/Batch */}
         {step === 1 && (
-          <div className="p-6 space-y-5">
+          <div className="p-4 sm:p-6 space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -395,7 +384,7 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
 
         {/* Step 2: Custom Fee Structure, Scholarship & Payment Gateway */}
         {step === 2 && (
-          <div className="p-6 space-y-5">
+          <div className="p-4 sm:p-6 space-y-5">
             
             <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg p-4">
               <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-2">
@@ -669,8 +658,6 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
             </div>
           </div>
         )}
-
-      </div>
-    </div>
+    </Modal>
   );
 };

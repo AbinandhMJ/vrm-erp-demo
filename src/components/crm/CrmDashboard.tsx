@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { Modal } from '../common/Modal';
 import { Lead, LeadStatus, LeadSource } from '../../types';
 import {
   UserPlus,
@@ -20,6 +21,8 @@ import {
   X
 } from 'lucide-react';
 import { AdmissionModal } from '../admissions/AdmissionModal';
+import { BarsChart, ChartCard } from '../charts/Charts';
+import { addDays, parseISODate } from '../../lib/dates';
 
 export const CrmDashboard: React.FC = () => {
   const {
@@ -115,6 +118,28 @@ export const CrmDashboard: React.FC = () => {
   const readyToJoinCount = scopedLeads.filter(l => l.status === 'ready_to_join').length;
   const followUpsDue = scopedLeads.filter(isFollowUpDue).length;
   const openLeads = scopedLeads.filter(isOpen).length;
+
+  const pipelineRows = (
+    [
+      ['new', 'New'],
+      ['contacted', 'Contacted'],
+      ['consultation_scheduled', 'Consultation'],
+      ['demo_attended', 'Attended demo'],
+      ['ready_to_join', 'Ready to join']
+    ] as [LeadStatus, string][]
+  ).map(([status, stage]) => ({ stage, leads: scopedLeads.filter(l => l.status === status).length }));
+
+  const weekStart = addDays(today, -((parseISODate(today).getDay() + 6) % 7));
+  const weeklyRows = Array.from({ length: 8 }, (_, i) => {
+    const start = addDays(weekStart, -7 * (7 - i));
+    const end = addDays(start, 6);
+    const inWeek = scopedLeads.filter(l => l.createdAt.slice(0, 10) >= start && l.createdAt.slice(0, 10) <= end);
+    return {
+      week: parseISODate(start).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+      enquiries: inWeek.length,
+      joined: scopedLeads.filter(l => (l.convertedAt || '') >= start && (l.convertedAt || '') <= end).length
+    };
+  });
 
   const handleCreateLead = (e: React.FormEvent) => {
     e.preventDefault();
@@ -242,6 +267,30 @@ export const CrmDashboard: React.FC = () => {
           </div>
           <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Of closed leads (joined vs dropped)</p>
         </div>
+      </div>
+
+      {/* Pipeline and weekly intake */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ChartCard title="Lead pipeline" note="Open leads by stage" empty={openLeads === 0} emptyText="No open leads. Capture an enquiry to start the pipeline.">
+          <BarsChart
+            horizontal
+            height={220}
+            data={pipelineRows}
+            xKey="stage"
+            series={[{ key: 'leads', label: 'Leads' }]}
+          />
+        </ChartCard>
+        <ChartCard title="New enquiries" note="Per week, last 8 weeks" empty={scopedLeads.length === 0} emptyText="No enquiries yet.">
+          <BarsChart
+            height={220}
+            data={weeklyRows}
+            xKey="week"
+            series={[
+              { key: 'enquiries', label: 'Enquiries' },
+              { key: 'joined', label: 'Joined' }
+            ]}
+          />
+        </ChartCard>
       </div>
 
       {/* Counselor Team Distribution Cards */}
@@ -531,227 +580,203 @@ export const CrmDashboard: React.FC = () => {
 
       {/* Follow-up Consultation Logger Modal */}
       {selectedLeadForFollowUp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Log Consultation & Follow-up: {selectedLeadForFollowUp.studentName}
-              </h3>
-              <button
-                onClick={() => setSelectedLeadForFollowUp(null)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm"
-              >
-                ✕
-              </button>
-            </div>
+        <Modal title={<>Log Consultation & Follow-up: {selectedLeadForFollowUp.studentName}</>} onClose={() => setSelectedLeadForFollowUp(null)} size="md" bodyClassName="px-5 py-4 space-y-4">
 
-            <form onSubmit={handleSaveFollowUp} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Update Lead Pipeline Status
-                </label>
-                <select
-                  value={followUpStatus}
-                  onChange={e => setFollowUpStatus(e.target.value as LeadStatus)}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                >
-                  <option value="contacted">Contacted · Shared Syllabus Guide</option>
-                  <option value="consultation_scheduled">Consultation Scheduled with Mentor</option>
-                  <option value="demo_attended">Attended Demo Lecture</option>
-                  <option value="ready_to_join">Ready to Join · Preparing Admission</option>
-                  <option value="dropped">Not Interested / Postponed to 2027</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Next Follow-up or In-Person Consultation Date
-                </label>
-                <input
-                  type="date"
-                  value={followUpDate}
-                  onChange={e => setFollowUpDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Counseling Notes & Student Aspirations *
-                </label>
-                <textarea
-                  rows={3}
-                  value={followUpNotes}
-                  onChange={e => setFollowUpNotes(e.target.value)}
-                  placeholder="e.g. Student visited center, interested in Morning batch. Discussed Optional subject guidance with Dr. Ramanathan..."
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  required
-                />
-              </div>
-
-              {selectedLeadForFollowUp.followUps.length > 0 && (
-                <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2">
-                    Previous Consultation History
-                  </span>
-                  <div className="space-y-2 max-h-36 overflow-y-auto">
-                    {selectedLeadForFollowUp.followUps.map(fu => (
-                      <div key={fu.id} className="p-2 bg-slate-50 dark:bg-slate-800/70 rounded border border-slate-100 dark:border-slate-700 text-[11px]">
-                        <div className="flex justify-between text-slate-400">
-                          <span>{fu.counselorName}</span>
-                          <span>{new Date(fu.timestamp).toLocaleDateString('en-IN')}</span>
-                        </div>
-                        <p className="text-slate-700 dark:text-slate-300 mt-1">{fu.notes}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setSelectedLeadForFollowUp(null)}
-                  className="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 font-semibold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg"
-                >
-                  Save Log
-                </button>
-              </div>
-            </form>
+        <form onSubmit={handleSaveFollowUp} className="space-y-4 text-xs">
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Update Lead Pipeline Status
+            </label>
+            <select
+              value={followUpStatus}
+              onChange={e => setFollowUpStatus(e.target.value as LeadStatus)}
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <option value="contacted">Contacted · Shared Syllabus Guide</option>
+              <option value="consultation_scheduled">Consultation Scheduled with Mentor</option>
+              <option value="demo_attended">Attended Demo Lecture</option>
+              <option value="ready_to_join">Ready to Join · Preparing Admission</option>
+              <option value="dropped">Not Interested / Postponed to 2027</option>
+            </select>
           </div>
-        </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Next Follow-up or In-Person Consultation Date
+            </label>
+            <input
+              type="date"
+              value={followUpDate}
+              onChange={e => setFollowUpDate(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Counseling Notes & Student Aspirations *
+            </label>
+            <textarea
+              rows={3}
+              value={followUpNotes}
+              onChange={e => setFollowUpNotes(e.target.value)}
+              placeholder="e.g. Student visited center, interested in Morning batch. Discussed Optional subject guidance with Dr. Ramanathan..."
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+              required
+            />
+          </div>
+
+          {selectedLeadForFollowUp.followUps.length > 0 && (
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2">
+                Previous Consultation History
+              </span>
+              <div className="space-y-2 max-h-36 overflow-y-auto">
+                {selectedLeadForFollowUp.followUps.map(fu => (
+                  <div key={fu.id} className="p-2 bg-slate-50 dark:bg-slate-800/70 rounded border border-slate-100 dark:border-slate-700 text-[11px]">
+                    <div className="flex justify-between text-slate-400">
+                      <span>{fu.counselorName}</span>
+                      <span>{new Date(fu.timestamp).toLocaleDateString('en-IN')}</span>
+                    </div>
+                    <p className="text-slate-700 dark:text-slate-300 mt-1">{fu.notes}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setSelectedLeadForFollowUp(null)}
+              className="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-1.5 font-semibold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg"
+            >
+              Save Log
+            </button>
+          </div>
+        </form>
+        </Modal>
       )}
 
       {/* New Inbound Lead Modal */}
       {isNewLeadModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Capture New Inbound Lead</h3>
-              <button
-                onClick={() => setIsNewLeadModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm"
-              >
-                ✕
-              </button>
-            </div>
+        <Modal title="Capture New Inbound Lead" onClose={() => setIsNewLeadModalOpen(false)} size="md" bodyClassName="px-5 py-4 space-y-4">
 
-            <form onSubmit={handleCreateLead} className="space-y-3 text-xs">
-              {leadError && (
-                <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300">{leadError}</div>
-              )}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Candidate Full Name *</label>
-                <input
-                  type="text"
-                  value={newLeadName}
-                  onChange={e => setNewLeadName(e.target.value)}
-                  placeholder="e.g. Meenakshi Sundaram"
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Mobile Phone *</label>
-                  <input
-                    type="tel"
-                    value={newLeadPhone}
-                    onChange={e => setNewLeadPhone(e.target.value)}
-                    placeholder="+91 98401 XXXXX"
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    value={newLeadEmail}
-                    onChange={e => setNewLeadEmail(e.target.value)}
-                    placeholder="aspirant@gmail.com"
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Exam Year</label>
-                  <select
-                    value={newLeadTargetYear}
-                    onChange={e => setNewLeadTargetYear(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  >
-                    <option value="2026">UPSC 2026</option>
-                    <option value="2027">UPSC 2027</option>
-                    <option value="2028">UPSC 2028 Foundation</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Inbound Channel</label>
-                  <select
-                    value={newLeadSource}
-                    onChange={e => setNewLeadSource(e.target.value as LeadSource)}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  >
-                    <option value="website">Website Portal Form</option>
-                    <option value="field_agent">Field Agent / College Seminar</option>
-                    <option value="walk_in">Academy Walk-in</option>
-                    <option value="referral">Alumni Referral</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Interested Program</label>
-                <select
-                  value={newLeadCourse}
-                  onChange={e => setNewLeadCourse(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                >
-                  {courses.map(c => (
-                    <option key={c.id} value={c.name}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Initial Enquiry Notes</label>
-                <textarea
-                  rows={2}
-                  value={newLeadNotes}
-                  onChange={e => setNewLeadNotes(e.target.value)}
-                  placeholder="e.g. Final year engineering student, needs weekend batch..."
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsNewLeadModalOpen(false)}
-                  className="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 font-semibold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg"
-                >
-                  Auto-Assign Counselor & Save
-                </button>
-              </div>
-            </form>
+        <form onSubmit={handleCreateLead} className="space-y-3 text-xs">
+          {leadError && (
+            <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300">{leadError}</div>
+          )}
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Candidate Full Name *</label>
+            <input
+              type="text"
+              value={newLeadName}
+              onChange={e => setNewLeadName(e.target.value)}
+              placeholder="e.g. Meenakshi Sundaram"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+              required
+            />
           </div>
-        </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Mobile Phone *</label>
+              <input
+                type="tel"
+                value={newLeadPhone}
+                onChange={e => setNewLeadPhone(e.target.value)}
+                placeholder="+91 98401 XXXXX"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Email Address</label>
+              <input
+                type="email"
+                value={newLeadEmail}
+                onChange={e => setNewLeadEmail(e.target.value)}
+                placeholder="aspirant@gmail.com"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Exam Year</label>
+              <select
+                value={newLeadTargetYear}
+                onChange={e => setNewLeadTargetYear(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              >
+                <option value="2026">UPSC 2026</option>
+                <option value="2027">UPSC 2027</option>
+                <option value="2028">UPSC 2028 Foundation</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Inbound Channel</label>
+              <select
+                value={newLeadSource}
+                onChange={e => setNewLeadSource(e.target.value as LeadSource)}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              >
+                <option value="website">Website Portal Form</option>
+                <option value="field_agent">Field Agent / College Seminar</option>
+                <option value="walk_in">Academy Walk-in</option>
+                <option value="referral">Alumni Referral</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Interested Program</label>
+            <select
+              value={newLeadCourse}
+              onChange={e => setNewLeadCourse(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+            >
+              {courses.map(c => (
+                <option key={c.id} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Initial Enquiry Notes</label>
+            <textarea
+              rows={2}
+              value={newLeadNotes}
+              onChange={e => setNewLeadNotes(e.target.value)}
+              placeholder="e.g. Final year engineering student, needs weekend batch..."
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setIsNewLeadModalOpen(false)}
+              className="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-1.5 font-semibold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg"
+            >
+              Auto-Assign Counselor & Save
+            </button>
+          </div>
+        </form>
+        </Modal>
       )}
 
       {/* Admission Modal when converting lead */}

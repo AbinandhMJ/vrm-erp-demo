@@ -23,7 +23,8 @@ import {
   StaffMember,
   Student,
   StudentTestAttempt,
-  UserAccount
+  UserAccount,
+  DailyQuizAttempt
 } from '../types';
 import {
   INITIAL_ASSESSMENT_TESTS,
@@ -38,6 +39,7 @@ import {
 } from './mockData';
 import { addDays, parseISODate, todayISO, toISODate, weekdayOf } from '../lib/dates';
 import { allocatePayment, buildInstallmentSchedule, computeDiscount } from '../lib/fees';
+import { pickDailyQuestions } from '../lib/dailyQuiz';
 
 // ---------- deterministic randomness ----------
 const mulberry32 = (seed: number) => () => {
@@ -118,6 +120,7 @@ export interface SeedData {
   staffMembers: StaffMember[];
   staffAttendance: StaffAttendanceEntry[];
   salaryPayouts: SalaryPayout[];
+  dailyQuizAttempts: DailyQuizAttempt[];
 }
 
 export const buildSeed = (): SeedData => {
@@ -650,53 +653,29 @@ export const buildSeed = (): SeedData => {
     }
   }
 
-  // 8. Login accounts: demo personas + every student and staff member.
-  const accounts: UserAccount[] = [
-    {
-      id: 'usr-mgmt-01',
-      username: 'director@vrmiasacademy.in',
-      password: 'admin123',
-      role: 'management',
-      name: 'Dr. V. R. Murugan, Ex-IRS',
-      email: 'director@vrmiasacademy.in',
-      phone: '+91 98401 23456',
-      designation: 'Founder & Director General',
-      createdAt: '2020-01-01'
+  // 8. Daily quiz answers for the last two weeks (today left open for the live demo).
+  const dailyQuizAttempts: DailyQuizAttempt[] = [];
+  for (let back = 14; back >= 1; back--) {
+    const date = addDays(TODAY, -back);
+    const qs = pickDailyQuestions(INITIAL_QUESTION_BANK, date);
+    for (const s of students) {
+      if (s.admissionDate > date) continue;
+      const p = profiles.get(s.id)!;
+      if (!chance(0.35 + p.ability * 0.4)) continue; // engaged students answer more often
+      const answers: Record<string, number> = {};
+      let correct = 0;
+      for (const q of qs) {
+        if (chance(p.ability)) {
+          answers[q.id] = q.correctOptionIndex;
+          correct++;
+        } else answers[q.id] = pick(q.options.map((_, i) => i).filter(i => i !== q.correctOptionIndex));
+      }
+      dailyQuizAttempts.push({ id: `dq-${s.id}-${date}`, studentId: s.id, date, questionIds: qs.map(q => q.id), answers, correct, total: qs.length });
     }
-  ];
-  const staffRole = (st: StaffMember): UserAccount['role'] =>
-    st.department === 'Faculty' ? 'faculty' : st.department === 'Counseling' ? 'field_agent' : 'office_staff';
-  const staffPassword: Record<string, string> = { 'usr-staff-02': 'office123', 'usr-fac-03': 'faculty123', 'usr-agent-05': 'agent123' };
-  const counselorByEmail = new Map(counselors.map(c => [c.email, c.id]));
-  for (const st of staffMembers) {
-    accounts.push({
-      id: `acc-${st.id}`,
-      username: st.email,
-      password: staffPassword[st.id] || 'staff123',
-      role: staffRole(st),
-      name: st.name,
-      email: st.email,
-      phone: st.phone,
-      designation: st.designation,
-      linkedStaffId: st.id,
-      linkedCounselorId: counselorByEmail.get(st.email),
-      createdAt: st.joiningDate
-    });
   }
-  for (const s of students) {
-    accounts.push({
-      id: `acc-${s.id}`,
-      username: s.rollNumber,
-      password: s.id === 'stu-01' ? 'student123' : studentDefaultPassword(s.phone),
-      role: 'student',
-      name: s.name,
-      email: s.email,
-      phone: s.phone,
-      designation: `Enrolled Aspirant (Roll: ${s.rollNumber})`,
-      linkedStudentId: s.id,
-      createdAt: s.admissionDate
-    });
-  }
+
+  // 9. Login accounts: demo personas + every student and staff member.
+  const accounts = buildAccounts(staffMembers, students);
 
   return {
     students,
@@ -710,7 +689,79 @@ export const buildSeed = (): SeedData => {
     accounts,
     staffMembers,
     staffAttendance,
-    salaryPayouts: salaryPayouts.reverse()
+    salaryPayouts: salaryPayouts.reverse(),
+    dailyQuizAttempts
+  };
+};
+
+const MANAGEMENT_ACCOUNT: UserAccount = {
+  id: 'usr-mgmt-01',
+  username: 'director@vrmiasacademy.in',
+  password: 'admin123',
+  role: 'management',
+  name: 'Dr. V. R. Murugan, Ex-IRS',
+  email: 'director@vrmiasacademy.in',
+  phone: '+91 98401 23456',
+  designation: 'Founder & Director General',
+  createdAt: '2020-01-01'
+};
+
+/** Logins for management, every staff member and every student. */
+export const buildAccounts = (staffMembers: StaffMember[], students: Student[]): UserAccount[] => {
+  const staffRole = (st: StaffMember): UserAccount['role'] =>
+    st.department === 'Faculty' ? 'faculty' : st.department === 'Counseling' ? 'field_agent' : 'office_staff';
+  const staffPassword: Record<string, string> = { 'usr-staff-02': 'office123', 'usr-fac-03': 'faculty123', 'usr-agent-05': 'agent123' };
+  const counselorByEmail = new Map(INITIAL_COUNSELORS.map(c => [c.email, c.id]));
+  return [
+    MANAGEMENT_ACCOUNT,
+    ...staffMembers.map(st => ({
+      id: `acc-${st.id}`,
+      username: st.email,
+      password: staffPassword[st.id] || 'staff123',
+      role: staffRole(st),
+      name: st.name,
+      email: st.email,
+      phone: st.phone,
+      designation: st.designation,
+      linkedStaffId: st.id,
+      linkedCounselorId: counselorByEmail.get(st.email),
+      createdAt: st.joiningDate
+    })),
+    ...students.map(s => ({
+      id: `acc-${s.id}`,
+      username: s.rollNumber,
+      password: s.id === 'stu-01' ? 'student123' : studentDefaultPassword(s.phone),
+      role: 'student' as const,
+      name: s.name,
+      email: s.email,
+      phone: s.phone,
+      designation: `Enrolled Aspirant (Roll: ${s.rollNumber})`,
+      linkedStudentId: s.id,
+      createdAt: s.admissionDate
+    }))
+  ];
+};
+
+/**
+ * What the app contains on first open (and after "Clear all data"): logins, staff, courses,
+ * batches, timetable and the question bank. No students, leads, fees or activity.
+ */
+export const buildBaseData = (): SeedData => {
+  const staffMembers = INITIAL_STAFF_MEMBERS.map(s => ({ ...s }));
+  return {
+    students: [],
+    invoices: [],
+    receipts: [],
+    attendance: [],
+    assessmentTests: [],
+    studentAttempts: [],
+    leads: [],
+    counselors: INITIAL_COUNSELORS.map(c => ({ ...c })),
+    accounts: buildAccounts(staffMembers, []),
+    staffMembers,
+    staffAttendance: [],
+    salaryPayouts: [],
+    dailyQuizAttempts: []
   };
 };
 

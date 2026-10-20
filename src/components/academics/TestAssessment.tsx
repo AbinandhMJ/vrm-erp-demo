@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { Modal } from '../common/Modal';
 import { AssessmentTest, Question, StudentTestAttempt } from '../../types';
 import { formatDate } from '../../lib/dates';
 import {
@@ -59,7 +60,8 @@ export const TestAssessment: React.FC = () => {
   const [attemptsShown, setAttemptsShown] = useState(20);
 
   // Primary Workspace Sub-Tabs: 'bank' | 'tests' | 'analytics'
-  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'bank' | 'tests' | 'analytics'>('bank');
+  // Students never see the question bank (it contains answers); they start on their tests.
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'bank' | 'tests' | 'analytics'>(role === 'student' ? 'tests' : 'bank');
 
   // Question Bank Filter & Search States
   const [searchBankQuery, setSearchBankQuery] = useState('');
@@ -558,6 +560,7 @@ export const TestAssessment: React.FC = () => {
 
       {/* Main Sub-Navigation Tabs */}
       <div className="flex items-center gap-1.5 p-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-x-auto">
+        {role !== 'student' && (
         <button
           onClick={() => setActiveWorkspaceTab('bank')}
           className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg transition-colors whitespace-nowrap shrink-0 ${
@@ -572,6 +575,7 @@ export const TestAssessment: React.FC = () => {
             {totalQuestions}
           </span>
         </button>
+        )}
 
         <button
           onClick={() => setActiveWorkspaceTab('tests')}
@@ -584,7 +588,7 @@ export const TestAssessment: React.FC = () => {
           <Play className="w-3.5 h-3.5" />
           <span>Scheduled Tests & Quizzes</span>
           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-slate-900/10 dark:bg-slate-900/40">
-            {assessmentTests.length}
+            {visibleTests.length}
           </span>
         </button>
 
@@ -1120,856 +1124,784 @@ export const TestAssessment: React.FC = () => {
       {/* MODAL 1: ADD QUESTION TO BANK (WITH MARKS & PENALTY ENGINE)     */}
       {/* ============================================================== */}
       {isAddQuestionModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-2xl w-full p-6 space-y-5 my-6 max-h-[90vh] overflow-y-auto">
-            
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <Brain className="w-5 h-5 text-amber-500" />
-                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
-                  Add New Item to Institutional Question Bank
-                </h3>
-              </div>
-              <button
-                onClick={() => setIsAddQuestionModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+        <Modal title="Add New Item to Institutional Question Bank" onClose={() => setIsAddQuestionModalOpen(false)} size="lg" bodyClassName="px-5 py-4 space-y-5">
 
-            {/* Quick Populate Template Helpers */}
-            <div className="p-3 bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-1.5 text-amber-900 dark:text-amber-300 font-semibold">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                <span>Quick-Load Realistic Exam Prompts:</span>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={handlePreFillPolitySample}
-                  className="px-2.5 py-1 rounded bg-white dark:bg-slate-800 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-100/50 text-[11px] font-semibold transition-colors"
-                >
-                  UPSC Polity (+2.0 M / -0.66 P)
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePreFillCsatSample}
-                  className="px-2.5 py-1 rounded bg-white dark:bg-slate-800 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-100/50 text-[11px] font-semibold transition-colors"
-                >
-                  CSAT Reasoning (+2.5 M / -0.83 P)
-                </button>
-              </div>
-            </div>
-
-            <form onSubmit={handleAddQuestionSubmit} className="space-y-4 text-xs">
-              
-              {/* Question Statement */}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Question Prompt / Problem Statement *
-                </label>
-                <textarea
-                  rows={3}
-                  value={qText}
-                  onChange={e => setQText(e.target.value)}
-                  placeholder="e.g. Consider the following statements with reference to the Doctrine of Basic Structure..."
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  required
-                />
-              </div>
-
-              {/* Subject, Topic & Difficulty */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Subject Domain *
-                  </label>
-                  <select
-                    value={qSubject}
-                    onChange={e => setQSubject(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none"
-                  >
-                    <option value="Indian Polity">Indian Polity</option>
-                    <option value="Indian Economy">Indian Economy</option>
-                    <option value="Modern History">Modern History</option>
-                    <option value="Geography">Geography</option>
-                    <option value="Environment & Ecology">Environment & Ecology</option>
-                    <option value="Science & Technology">Science & Technology</option>
-                    <option value="CSAT Aptitude">CSAT Aptitude</option>
-                    <option value="Current Affairs">Current Affairs</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Specific Topic / Chapter
-                  </label>
-                  <input
-                    type="text"
-                    value={qTopic}
-                    onChange={e => setQTopic(e.target.value)}
-                    placeholder="e.g. Fundamental Rights, Preamble"
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Difficulty Level
-                  </label>
-                  <select
-                    value={qDifficulty}
-                    onChange={e => setQDifficulty(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  >
-                    <option value="Easy">Easy (Conceptual)</option>
-                    <option value="Moderate">Moderate (Application)</option>
-                    <option value="Advanced">Advanced (Multi-statement)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Marks Allocation & Negative Penalties */}
-              <div className="p-3 bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-bold text-amber-900 dark:text-amber-300 mb-1">
-                    Marks for Correct Answer (+M) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="1"
-                    max="10"
-                    value={qMarks}
-                    onChange={e => setQMarks(parseFloat(e.target.value) || 2)}
-                    className="w-full px-3 py-1.5 border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg font-mono font-bold"
-                  />
-                  <span className="text-[10px] text-slate-500">Standard UPSC: +2.0 marks</span>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-amber-900 dark:text-amber-300 mb-1">
-                    Negative Penalty for Wrong (-N) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="5"
-                    value={qNegativeMarks}
-                    onChange={e => setQNegativeMarks(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-1.5 border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg font-mono font-bold text-rose-600"
-                  />
-                  <span className="text-[10px] text-slate-500">Standard UPSC: -0.66 marks</span>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-amber-900 dark:text-amber-300 mb-1">
-                    Previous Year Exam Tag
-                  </label>
-                  <input
-                    type="text"
-                    value={qPyqYear}
-                    onChange={e => setQPyqYear(e.target.value)}
-                    placeholder="e.g. UPSC CSE 2024, TNPSC Gr 1"
-                    className="w-full px-3 py-1.5 border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  />
-                  <span className="text-[10px] text-slate-500">Optional exam origin</span>
-                </div>
-              </div>
-
-              {/* Options A, B, C, D */}
-              <div className="space-y-2">
-                <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                  Multiple Choice Options (Select radio for Correct Key) *
-                </label>
-                
-                {[
-                  { label: 'A', value: optA, setter: setOptA, idx: 0 },
-                  { label: 'B', value: optB, setter: setOptB, idx: 1 },
-                  { label: 'C', value: optC, setter: setOptC, idx: 2 },
-                  { label: 'D', value: optD, setter: setOptD, idx: 3 }
-                ].map(item => (
-                  <div key={item.label} className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="correctKey"
-                      checked={correctKeyIndex === item.idx}
-                      onChange={() => setCorrectKeyIndex(item.idx)}
-                      className="w-4 h-4 text-amber-600 focus:ring-amber-500"
-                      title={`Mark ${item.label} as correct answer`}
-                    />
-                    <span className="font-mono font-bold text-slate-700 dark:text-slate-300 w-4">
-                      {item.label}:
-                    </span>
-                    <input
-                      type="text"
-                      value={item.value}
-                      onChange={e => item.setter(e.target.value)}
-                      placeholder={`Enter text for Option ${item.label}`}
-                      className="flex-1 px-3 py-1.5 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      required
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {/* Detailed Explanation / Source Reference */}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  In-Depth Explanation & Model Solution *
-                </label>
-                <textarea
-                  rows={2}
-                  value={qExplanation}
-                  onChange={e => setQExplanation(e.target.value)}
-                  placeholder="Explain why the chosen option is correct and point out errors in incorrect options..."
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  required
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsAddQuestionModalOpen(false)}
-                  className="px-4 py-2 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 text-white font-bold bg-amber-600 hover:bg-amber-500 rounded-lg shadow-xs"
-                >
-                  Save Question to Bank
-                </button>
-              </div>
-
-            </form>
+        {/* Quick Populate Template Helpers */}
+        <div className="p-3 bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-1.5 text-amber-900 dark:text-amber-300 font-semibold">
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+            <span>Quick-Load Realistic Exam Prompts:</span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handlePreFillPolitySample}
+              className="px-2.5 py-1 rounded bg-white dark:bg-slate-800 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-100/50 text-[11px] font-semibold transition-colors"
+            >
+              UPSC Polity (+2.0 M / -0.66 P)
+            </button>
+            <button
+              type="button"
+              onClick={handlePreFillCsatSample}
+              className="px-2.5 py-1 rounded bg-white dark:bg-slate-800 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-100/50 text-[11px] font-semibold transition-colors"
+            >
+              CSAT Reasoning (+2.5 M / -0.83 P)
+            </button>
           </div>
         </div>
+
+        <form onSubmit={handleAddQuestionSubmit} className="space-y-4 text-xs">
+          
+          {/* Question Statement */}
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Question Prompt / Problem Statement *
+            </label>
+            <textarea
+              rows={3}
+              value={qText}
+              onChange={e => setQText(e.target.value)}
+              placeholder="e.g. Consider the following statements with reference to the Doctrine of Basic Structure..."
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+              required
+            />
+          </div>
+
+          {/* Subject, Topic & Difficulty */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Subject Domain *
+              </label>
+              <select
+                value={qSubject}
+                onChange={e => setQSubject(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none"
+              >
+                <option value="Indian Polity">Indian Polity</option>
+                <option value="Indian Economy">Indian Economy</option>
+                <option value="Modern History">Modern History</option>
+                <option value="Geography">Geography</option>
+                <option value="Environment & Ecology">Environment & Ecology</option>
+                <option value="Science & Technology">Science & Technology</option>
+                <option value="CSAT Aptitude">CSAT Aptitude</option>
+                <option value="Current Affairs">Current Affairs</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Specific Topic / Chapter
+              </label>
+              <input
+                type="text"
+                value={qTopic}
+                onChange={e => setQTopic(e.target.value)}
+                placeholder="e.g. Fundamental Rights, Preamble"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Difficulty Level
+              </label>
+              <select
+                value={qDifficulty}
+                onChange={e => setQDifficulty(e.target.value as any)}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              >
+                <option value="Easy">Easy (Conceptual)</option>
+                <option value="Moderate">Moderate (Application)</option>
+                <option value="Advanced">Advanced (Multi-statement)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Marks Allocation & Negative Penalties */}
+          <div className="p-3 bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block font-bold text-amber-900 dark:text-amber-300 mb-1">
+                Marks for Correct Answer (+M) *
+              </label>
+              <input
+                type="number"
+                step="0.5"
+                min="1"
+                max="10"
+                value={qMarks}
+                onChange={e => setQMarks(parseFloat(e.target.value) || 2)}
+                className="w-full px-3 py-1.5 border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg font-mono font-bold"
+              />
+              <span className="text-[10px] text-slate-500">Standard UPSC: +2.0 marks</span>
+            </div>
+
+            <div>
+              <label className="block font-bold text-amber-900 dark:text-amber-300 mb-1">
+                Negative Penalty for Wrong (-N) *
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="5"
+                value={qNegativeMarks}
+                onChange={e => setQNegativeMarks(parseFloat(e.target.value) || 0)}
+                className="w-full px-3 py-1.5 border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg font-mono font-bold text-rose-600"
+              />
+              <span className="text-[10px] text-slate-500">Standard UPSC: -0.66 marks</span>
+            </div>
+
+            <div>
+              <label className="block font-bold text-amber-900 dark:text-amber-300 mb-1">
+                Previous Year Exam Tag
+              </label>
+              <input
+                type="text"
+                value={qPyqYear}
+                onChange={e => setQPyqYear(e.target.value)}
+                placeholder="e.g. UPSC CSE 2024, TNPSC Gr 1"
+                className="w-full px-3 py-1.5 border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              />
+              <span className="text-[10px] text-slate-500">Optional exam origin</span>
+            </div>
+          </div>
+
+          {/* Options A, B, C, D */}
+          <div className="space-y-2">
+            <label className="block font-semibold text-slate-700 dark:text-slate-300">
+              Multiple Choice Options (Select radio for Correct Key) *
+            </label>
+            
+            {[
+              { label: 'A', value: optA, setter: setOptA, idx: 0 },
+              { label: 'B', value: optB, setter: setOptB, idx: 1 },
+              { label: 'C', value: optC, setter: setOptC, idx: 2 },
+              { label: 'D', value: optD, setter: setOptD, idx: 3 }
+            ].map(item => (
+              <div key={item.label} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="correctKey"
+                  checked={correctKeyIndex === item.idx}
+                  onChange={() => setCorrectKeyIndex(item.idx)}
+                  className="w-4 h-4 text-amber-600 focus:ring-amber-500"
+                  title={`Mark ${item.label} as correct answer`}
+                />
+                <span className="font-mono font-bold text-slate-700 dark:text-slate-300 w-4">
+                  {item.label}:
+                </span>
+                <input
+                  type="text"
+                  value={item.value}
+                  onChange={e => item.setter(e.target.value)}
+                  placeholder={`Enter text for Option ${item.label}`}
+                  className="flex-1 px-3 py-1.5 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  required
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* Detailed Explanation / Source Reference */}
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              In-Depth Explanation & Model Solution *
+            </label>
+            <textarea
+              rows={2}
+              value={qExplanation}
+              onChange={e => setQExplanation(e.target.value)}
+              placeholder="Explain why the chosen option is correct and point out errors in incorrect options..."
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              required
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setIsAddQuestionModalOpen(false)}
+              className="px-4 py-2 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 text-white font-bold bg-amber-600 hover:bg-amber-500 rounded-lg shadow-xs"
+            >
+              Save Question to Bank
+            </button>
+          </div>
+
+        </form>
+        </Modal>
       )}
 
       {/* ============================================================== */}
       {/* MODAL 1B: EDIT QUESTION IN BANK (MARKS & PENALTY EDITOR)       */}
       {/* ============================================================== */}
       {isEditQuestionModalOpen && editingQuestion && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-2xl w-full p-6 space-y-5 my-6 max-h-[90vh] overflow-y-auto">
-            
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <Edit3 className="w-5 h-5 text-amber-500" />
-                <div>
-                  <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
-                    Edit Question & Marks Configuration
-                  </h3>
-                  <span className="text-[11px] font-mono text-slate-400">ID: {editingQuestion.id}</span>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setIsEditQuestionModalOpen(false);
-                  setEditingQuestion(null);
-                }}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+        <Modal title="Edit Question & Marks Configuration" onClose={() => { setIsEditQuestionModalOpen(false); setEditingQuestion(null); }} size="lg" bodyClassName="px-5 py-4 space-y-5">
+
+        <form onSubmit={handleEditQuestionSubmit} className="space-y-4 text-xs">
+          
+          {/* Question Statement */}
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Question Prompt / Problem Statement *
+            </label>
+            <textarea
+              rows={3}
+              value={qText}
+              onChange={e => setQText(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+              required
+            />
+          </div>
+
+          {/* Subject, Topic & Difficulty */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Subject Domain *
+              </label>
+              <select
+                value={qSubject}
+                onChange={e => setQSubject(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none"
               >
-                <X className="w-4 h-4" />
-              </button>
+                <option value="Indian Polity">Indian Polity</option>
+                <option value="Indian Economy">Indian Economy</option>
+                <option value="Modern History">Modern History</option>
+                <option value="Geography">Geography</option>
+                <option value="Environment & Ecology">Environment & Ecology</option>
+                <option value="Science & Technology">Science & Technology</option>
+                <option value="CSAT Aptitude">CSAT Aptitude</option>
+                <option value="Current Affairs">Current Affairs</option>
+              </select>
             </div>
 
-            <form onSubmit={handleEditQuestionSubmit} className="space-y-4 text-xs">
-              
-              {/* Question Statement */}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Question Prompt / Problem Statement *
-                </label>
-                <textarea
-                  rows={3}
-                  value={qText}
-                  onChange={e => setQText(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  required
-                />
-              </div>
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Specific Topic / Chapter
+              </label>
+              <input
+                type="text"
+                value={qTopic}
+                onChange={e => setQTopic(e.target.value)}
+                placeholder="e.g. Fundamental Rights, Preamble"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              />
+            </div>
 
-              {/* Subject, Topic & Difficulty */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Subject Domain *
-                  </label>
-                  <select
-                    value={qSubject}
-                    onChange={e => setQSubject(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none"
-                  >
-                    <option value="Indian Polity">Indian Polity</option>
-                    <option value="Indian Economy">Indian Economy</option>
-                    <option value="Modern History">Modern History</option>
-                    <option value="Geography">Geography</option>
-                    <option value="Environment & Ecology">Environment & Ecology</option>
-                    <option value="Science & Technology">Science & Technology</option>
-                    <option value="CSAT Aptitude">CSAT Aptitude</option>
-                    <option value="Current Affairs">Current Affairs</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Specific Topic / Chapter
-                  </label>
-                  <input
-                    type="text"
-                    value={qTopic}
-                    onChange={e => setQTopic(e.target.value)}
-                    placeholder="e.g. Fundamental Rights, Preamble"
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Difficulty Level
-                  </label>
-                  <select
-                    value={qDifficulty}
-                    onChange={e => setQDifficulty(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  >
-                    <option value="Easy">Easy (Conceptual)</option>
-                    <option value="Moderate">Moderate (Application)</option>
-                    <option value="Advanced">Advanced (Multi-statement)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Marks Allocation & Negative Penalties */}
-              <div className="p-3 bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-bold text-amber-900 dark:text-amber-300 mb-1">
-                    Marks for Correct (+M) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="1"
-                    max="10"
-                    value={qMarks}
-                    onChange={e => setQMarks(parseFloat(e.target.value) || 2)}
-                    className="w-full px-3 py-1.5 border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg font-mono font-bold"
-                  />
-                  <span className="text-[10px] text-slate-500">e.g. +2.0 or +2.5 marks</span>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-amber-900 dark:text-amber-300 mb-1">
-                    Negative Penalty (-N) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="5"
-                    value={qNegativeMarks}
-                    onChange={e => setQNegativeMarks(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-1.5 border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg font-mono font-bold text-rose-600"
-                  />
-                  <span className="text-[10px] text-slate-500">e.g. -0.66 or -0.83 marks</span>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-amber-900 dark:text-amber-300 mb-1">
-                    Exam Tag / Origin
-                  </label>
-                  <input
-                    type="text"
-                    value={qPyqYear}
-                    onChange={e => setQPyqYear(e.target.value)}
-                    placeholder="e.g. UPSC CSE 2024"
-                    className="w-full px-3 py-1.5 border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  />
-                  <span className="text-[10px] text-slate-500">PYQ reference</span>
-                </div>
-              </div>
-
-              {/* Options A, B, C, D */}
-              <div className="space-y-2">
-                <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                  Multiple Choice Options (Select radio for Correct Key) *
-                </label>
-                
-                {[
-                  { label: 'A', value: optA, setter: setOptA, idx: 0 },
-                  { label: 'B', value: optB, setter: setOptB, idx: 1 },
-                  { label: 'C', value: optC, setter: setOptC, idx: 2 },
-                  { label: 'D', value: optD, setter: setOptD, idx: 3 }
-                ].map(item => (
-                  <div key={item.label} className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="editCorrectKey"
-                      checked={correctKeyIndex === item.idx}
-                      onChange={() => setCorrectKeyIndex(item.idx)}
-                      className="w-4 h-4 text-amber-600 focus:ring-amber-500"
-                      title={`Mark ${item.label} as correct answer`}
-                    />
-                    <span className="font-mono font-bold text-slate-700 dark:text-slate-300 w-4">
-                      {item.label}:
-                    </span>
-                    <input
-                      type="text"
-                      value={item.value}
-                      onChange={e => item.setter(e.target.value)}
-                      placeholder={`Enter text for Option ${item.label}`}
-                      className="flex-1 px-3 py-1.5 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      required
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {/* Detailed Explanation / Source Reference */}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  In-Depth Explanation & Model Solution *
-                </label>
-                <textarea
-                  rows={2}
-                  value={qExplanation}
-                  onChange={e => setQExplanation(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  required
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsEditQuestionModalOpen(false);
-                    setEditingQuestion(null);
-                  }}
-                  className="px-4 py-2 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 text-white font-bold bg-amber-600 hover:bg-amber-500 rounded-lg shadow-xs"
-                >
-                  Save Changes
-                </button>
-              </div>
-
-            </form>
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Difficulty Level
+              </label>
+              <select
+                value={qDifficulty}
+                onChange={e => setQDifficulty(e.target.value as any)}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              >
+                <option value="Easy">Easy (Conceptual)</option>
+                <option value="Moderate">Moderate (Application)</option>
+                <option value="Advanced">Advanced (Multi-statement)</option>
+              </select>
+            </div>
           </div>
-        </div>
+
+          {/* Marks Allocation & Negative Penalties */}
+          <div className="p-3 bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block font-bold text-amber-900 dark:text-amber-300 mb-1">
+                Marks for Correct (+M) *
+              </label>
+              <input
+                type="number"
+                step="0.5"
+                min="1"
+                max="10"
+                value={qMarks}
+                onChange={e => setQMarks(parseFloat(e.target.value) || 2)}
+                className="w-full px-3 py-1.5 border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg font-mono font-bold"
+              />
+              <span className="text-[10px] text-slate-500">e.g. +2.0 or +2.5 marks</span>
+            </div>
+
+            <div>
+              <label className="block font-bold text-amber-900 dark:text-amber-300 mb-1">
+                Negative Penalty (-N) *
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="5"
+                value={qNegativeMarks}
+                onChange={e => setQNegativeMarks(parseFloat(e.target.value) || 0)}
+                className="w-full px-3 py-1.5 border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg font-mono font-bold text-rose-600"
+              />
+              <span className="text-[10px] text-slate-500">e.g. -0.66 or -0.83 marks</span>
+            </div>
+
+            <div>
+              <label className="block font-bold text-amber-900 dark:text-amber-300 mb-1">
+                Exam Tag / Origin
+              </label>
+              <input
+                type="text"
+                value={qPyqYear}
+                onChange={e => setQPyqYear(e.target.value)}
+                placeholder="e.g. UPSC CSE 2024"
+                className="w-full px-3 py-1.5 border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              />
+              <span className="text-[10px] text-slate-500">PYQ reference</span>
+            </div>
+          </div>
+
+          {/* Options A, B, C, D */}
+          <div className="space-y-2">
+            <label className="block font-semibold text-slate-700 dark:text-slate-300">
+              Multiple Choice Options (Select radio for Correct Key) *
+            </label>
+            
+            {[
+              { label: 'A', value: optA, setter: setOptA, idx: 0 },
+              { label: 'B', value: optB, setter: setOptB, idx: 1 },
+              { label: 'C', value: optC, setter: setOptC, idx: 2 },
+              { label: 'D', value: optD, setter: setOptD, idx: 3 }
+            ].map(item => (
+              <div key={item.label} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="editCorrectKey"
+                  checked={correctKeyIndex === item.idx}
+                  onChange={() => setCorrectKeyIndex(item.idx)}
+                  className="w-4 h-4 text-amber-600 focus:ring-amber-500"
+                  title={`Mark ${item.label} as correct answer`}
+                />
+                <span className="font-mono font-bold text-slate-700 dark:text-slate-300 w-4">
+                  {item.label}:
+                </span>
+                <input
+                  type="text"
+                  value={item.value}
+                  onChange={e => item.setter(e.target.value)}
+                  placeholder={`Enter text for Option ${item.label}`}
+                  className="flex-1 px-3 py-1.5 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  required
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* Detailed Explanation / Source Reference */}
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              In-Depth Explanation & Model Solution *
+            </label>
+            <textarea
+              rows={2}
+              value={qExplanation}
+              onChange={e => setQExplanation(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              required
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => {
+                setIsEditQuestionModalOpen(false);
+                setEditingQuestion(null);
+              }}
+              className="px-4 py-2 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 text-white font-bold bg-amber-600 hover:bg-amber-500 rounded-lg shadow-xs"
+            >
+              Save Changes
+            </button>
+          </div>
+
+        </form>
+        </Modal>
       )}
 
       {/* ============================================================== */}
       {/* MODAL 2: ASSEMBLE TEST FROM QUESTION BANK                      */}
       {/* ============================================================== */}
       {isAssembleTestModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-lg w-full p-6 space-y-4">
-            
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Assemble Test from Selected Bank Items
-                </h3>
-                <p className="text-xs text-slate-500">
-                  {selectedQuestionIdsForTest.length} questions selected from Question Bank
-                </p>
-              </div>
-              <button onClick={() => setIsAssembleTestModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-4 h-4" />
-              </button>
+        <Modal title="Assemble Test from Selected Bank Items" subtitle={<>{selectedQuestionIdsForTest.length} questions selected from Question Bank</>} onClose={() => setIsAssembleTestModalOpen(false)} size="md" bodyClassName="px-5 py-4 space-y-4">
+
+        <form onSubmit={handleAssembleTestSubmit} className="space-y-3 text-xs">
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Test Title *
+            </label>
+            <input
+              type="text"
+              value={newTestTitle}
+              onChange={e => setNewTestTitle(e.target.value)}
+              placeholder="e.g. UPSC CSE 2026 Prelims Mini Mock 05"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Test Code
+              </label>
+              <input
+                type="text"
+                value={newTestCode}
+                onChange={e => setNewTestCode(e.target.value)}
+                placeholder="e.g. VRM-MOCK-05"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg font-mono"
+              />
             </div>
 
-            <form onSubmit={handleAssembleTestSubmit} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Test Title *
-                </label>
-                <input
-                  type="text"
-                  value={newTestTitle}
-                  onChange={e => setNewTestTitle(e.target.value)}
-                  placeholder="e.g. UPSC CSE 2026 Prelims Mini Mock 05"
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Test Code
-                  </label>
-                  <input
-                    type="text"
-                    value={newTestCode}
-                    onChange={e => setNewTestCode(e.target.value)}
-                    placeholder="e.g. VRM-MOCK-05"
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Duration (Minutes)
-                  </label>
-                  <input
-                    type="number"
-                    min="5"
-                    max="180"
-                    value={newTestDuration}
-                    onChange={e => setNewTestDuration(parseInt(e.target.value) || 30)}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Category
-                  </label>
-                  <select
-                    value={newTestCategory}
-                    onChange={e => setNewTestCategory(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  >
-                    <option value="Prelims Mock">Prelims Mock</option>
-                    <option value="Subject Drill">Subject Drill</option>
-                    <option value="Mains Practice">Mains Practice</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Target Batch
-                  </label>
-                  <select
-                    value={newTestBatchId}
-                    onChange={e => setNewTestBatchId(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  >
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg text-xs space-y-1">
-                <span className="font-bold text-amber-900 dark:text-amber-300">Selected Items Summary:</span>
-                <p className="text-slate-600 dark:text-slate-400">
-                  {selectedQuestionIdsForTest.length} items will be scheduled with their respective marks and negative penalty rules.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsAssembleTestModalOpen(false)}
-                  className="px-4 py-2 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 text-white font-bold bg-amber-600 hover:bg-amber-500 rounded-lg shadow-xs"
-                >
-                  Publish Live Test
-                </button>
-              </div>
-
-            </form>
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Duration (Minutes)
+              </label>
+              <input
+                type="number"
+                min="5"
+                max="180"
+                value={newTestDuration}
+                onChange={e => setNewTestDuration(parseInt(e.target.value) || 30)}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg font-mono"
+              />
+            </div>
           </div>
-        </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Category
+              </label>
+              <select
+                value={newTestCategory}
+                onChange={e => setNewTestCategory(e.target.value as any)}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              >
+                <option value="Prelims Mock">Prelims Mock</option>
+                <option value="Subject Drill">Subject Drill</option>
+                <option value="Mains Practice">Mains Practice</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Target Batch
+              </label>
+              <select
+                value={newTestBatchId}
+                onChange={e => setNewTestBatchId(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              >
+                {batches.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg text-xs space-y-1">
+            <span className="font-bold text-amber-900 dark:text-amber-300">Selected Items Summary:</span>
+            <p className="text-slate-600 dark:text-slate-400">
+              {selectedQuestionIdsForTest.length} items will be scheduled with their respective marks and negative penalty rules.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setIsAssembleTestModalOpen(false)}
+              className="px-4 py-2 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 text-white font-bold bg-amber-600 hover:bg-amber-500 rounded-lg shadow-xs"
+            >
+              Publish Live Test
+            </button>
+          </div>
+
+        </form>
+        </Modal>
       )}
 
       {/* ============================================================== */}
       {/* LIVE TEST RUNNER VIEWPORT (MODAL OVERLAY)                       */}
       {/* ============================================================== */}
       {isTestRunning && activeTest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-2 sm:p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-5xl h-[92vh] flex flex-col overflow-hidden">
-            
-            {/* Top Bar: Title, Live Countdown Timer & Submit CTA */}
-            <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0">
-              <div>
-                <h3 className="text-sm font-bold tracking-tight">{activeTest.title}</h3>
-                <span className="text-[11px] text-slate-400">{activeTest.code} · {activeTest.subject}</span>
+        <Modal
+          title={activeTest.title}
+          subtitle={`${activeTest.code} · ${activeTest.subject}`}
+          headerTone="dark"
+          size="2xl"
+          className="sm:h-[92dvh]"
+          bodyClassName="p-0 flex flex-col"
+          dismissible={false}
+          onClose={() => {
+            if (window.confirm('Exit this test? Your answers will not be saved.')) setIsTestRunning(false);
+          }}
+          headerActions={
+            <>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 text-amber-400 font-mono font-bold text-sm border border-slate-700">
+                <Clock className="w-4 h-4" />
+                <span>{formatTime(secondsLeft)}</span>
               </div>
+              <button
+                onClick={() => {
+                  if (window.confirm('Submit test attempt now for automated grading?')) handleSubmitTest();
+                }}
+                className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors shadow-xs"
+              >
+                Submit
+              </button>
+            </>
+          }
+        >
+{/* Test Layout */}
+        <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
+          
+          {/* Question Workspace */}
+          <div className="md:flex-1 p-4 sm:p-6 md:overflow-y-auto space-y-6">
+            {(() => {
+              const currentQ = activeTest.questions[currentQuestionIndex];
+              if (!currentQ) return null;
+              const chosenOption = selectedAnswers[currentQ.id];
+              const isMarked = markedForReview[currentQ.id];
 
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-800 text-amber-400 font-mono font-bold text-sm border border-slate-700">
-                  <Clock className="w-4 h-4" />
-                  <span>{formatTime(secondsLeft)}</span>
-                </div>
-                <button
-                  onClick={() => {
-                    if (window.confirm('Submit test attempt now for automated grading?')) {
-                      handleSubmitTest();
-                    }
-                  }}
-                  className="px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors shadow-xs"
-                >
-                  Submit Test
-                </button>
-              </div>
-            </div>
-
-            {/* Test Layout */}
-            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-              
-              {/* Question Workspace */}
-              <div className="flex-1 p-6 overflow-y-auto space-y-6">
-                {(() => {
-                  const currentQ = activeTest.questions[currentQuestionIndex];
-                  if (!currentQ) return null;
-                  const chosenOption = selectedAnswers[currentQ.id];
-                  const isMarked = markedForReview[currentQ.id];
-
-                  return (
-                    <div className="space-y-6">
-                      <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 text-xs">
-                        <span className="font-mono font-bold text-slate-500 uppercase">
-                          Question {currentQuestionIndex + 1} of {activeTest.questions.length}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 text-[11px] font-mono">
-                            +{Number(currentQ.marks || 2).toFixed(2)} Marks
-                          </span>
-                          <span className="font-semibold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-900 text-[11px] font-mono">
-                            -{Number(currentQ.negativeMarks ?? activeTest.negativeMarksPerWrong ?? 0.66).toFixed(2)} Penalty
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Question Text */}
-                      <div className="text-sm sm:text-base text-slate-900 dark:text-white leading-relaxed font-medium whitespace-pre-line">
-                        {currentQ.questionText}
-                      </div>
-
-                      {/* Options */}
-                      <div className="space-y-2.5">
-                        {currentQ.options.map((opt, optIdx) => {
-                          const isSelected = chosenOption === optIdx;
-                          return (
-                            <button
-                              key={optIdx}
-                              onClick={() => handleOptionSelect(currentQ.id, optIdx)}
-                              className={`w-full text-left p-3.5 rounded-xl border text-xs flex items-start gap-3 transition-colors ${
-                                isSelected
-                                  ? 'border-amber-600 bg-amber-50/70 dark:bg-amber-950/40 font-semibold text-slate-950 dark:text-amber-200 shadow-2xs'
-                                  : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
-                              }`}
-                            >
-                              <span
-                                className={`w-5 h-5 rounded-full font-mono text-[11px] flex items-center justify-center shrink-0 ${
-                                  isSelected ? 'bg-amber-600 text-white font-bold' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                                }`}
-                              >
-                                {String.fromCharCode(65 + optIdx)}
-                              </span>
-                              <span className="pt-0.5 leading-relaxed">{opt}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Action Bar */}
-                      <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
-                        <div className="flex items-center gap-2">
-                          {chosenOption !== undefined && (
-                            <button
-                              onClick={() => handleClearResponse(currentQ.id)}
-                              className="px-3 py-1.5 text-xs text-rose-600 hover:text-rose-700"
-                            >
-                              Clear Response
-                            </button>
-                          )}
-                          <button
-                            onClick={() => toggleMarkForReview(currentQ.id)}
-                            className={`px-3 py-1.5 text-xs rounded-lg border font-medium ${
-                              isMarked
-                                ? 'border-purple-300 bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 font-bold'
-                                : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
-                            }`}
-                          >
-                            {isMarked ? '✓ Marked for Review' : 'Mark for Review'}
-                          </button>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
-                            disabled={currentQuestionIndex === 0}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg disabled:opacity-30"
-                          >
-                            <ChevronLeft className="w-4 h-4" />
-                            <span>Previous</span>
-                          </button>
-
-                          <button
-                            onClick={() =>
-                              setCurrentQuestionIndex(prev =>
-                                Math.min(activeTest.questions.length - 1, prev + 1)
-                              )
-                            }
-                            disabled={currentQuestionIndex === activeTest.questions.length - 1}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 dark:bg-amber-600 rounded-lg disabled:opacity-30"
-                          >
-                            <span>Save & Next</span>
-                            <ChevronRight className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
+              return (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 text-xs">
+                    <span className="font-mono font-bold text-slate-500 uppercase">
+                      Question {currentQuestionIndex + 1} of {activeTest.questions.length}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 text-[11px] font-mono">
+                        +{Number(currentQ.marks || 2).toFixed(2)} Marks
+                      </span>
+                      <span className="font-semibold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-900 text-[11px] font-mono">
+                        -{Number(currentQ.negativeMarks ?? activeTest.negativeMarksPerWrong ?? 0.66).toFixed(2)} Penalty
+                      </span>
                     </div>
-                  );
-                })()}
-              </div>
+                  </div>
 
-              {/* Question Palette Sidebar */}
-              <div className="w-full md:w-64 bg-slate-50 dark:bg-slate-950 p-5 border-t md:border-t-0 md:border-l border-slate-200 dark:border-slate-800 flex flex-col justify-between">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-3">
-                    Question Palette
-                  </h4>
-                  <div className="grid grid-cols-4 gap-2">
-                    {activeTest.questions.map((q, idx) => {
-                      const isAnswered = selectedAnswers[q.id] !== undefined;
-                      const isMarked = markedForReview[q.id];
-                      const isCurrent = currentQuestionIndex === idx;
+                  {/* Question Text */}
+                  <div className="text-sm sm:text-base text-slate-900 dark:text-white leading-relaxed font-medium whitespace-pre-line">
+                    {currentQ.questionText}
+                  </div>
 
-                      let btnStyle = 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300';
-                      if (isMarked) {
-                        btnStyle = 'bg-purple-600 text-white border-purple-600';
-                      } else if (isAnswered) {
-                        btnStyle = 'bg-emerald-600 text-white border-emerald-600';
-                      }
-
+                  {/* Options */}
+                  <div className="space-y-2.5">
+                    {currentQ.options.map((opt, optIdx) => {
+                      const isSelected = chosenOption === optIdx;
                       return (
                         <button
-                          key={q.id}
-                          onClick={() => setCurrentQuestionIndex(idx)}
-                          className={`h-9 rounded-lg font-mono text-xs font-bold border transition-all ${btnStyle} ${
-                            isCurrent ? 'ring-2 ring-amber-500 ring-offset-1' : ''
+                          key={optIdx}
+                          onClick={() => handleOptionSelect(currentQ.id, optIdx)}
+                          className={`w-full text-left p-3.5 rounded-xl border text-xs flex items-start gap-3 transition-colors ${
+                            isSelected
+                              ? 'border-amber-600 bg-amber-50/70 dark:bg-amber-950/40 font-semibold text-slate-950 dark:text-amber-200 shadow-2xs'
+                              : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
                           }`}
                         >
-                          {idx + 1}
+                          <span
+                            className={`w-5 h-5 rounded-full font-mono text-[11px] flex items-center justify-center shrink-0 ${
+                              isSelected ? 'bg-amber-600 text-white font-bold' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                            }`}
+                          >
+                            {String.fromCharCode(65 + optIdx)}
+                          </span>
+                          <span className="pt-0.5 leading-relaxed">{opt}</span>
                         </button>
                       );
                     })}
                   </div>
 
-                  {/* Legend */}
-                  <div className="mt-6 space-y-2 text-[11px] text-slate-500 dark:text-slate-400">
+                  {/* Action Bar */}
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
                     <div className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded bg-emerald-600" />
-                      <span>Answered</span>
+                      {chosenOption !== undefined && (
+                        <button
+                          onClick={() => handleClearResponse(currentQ.id)}
+                          className="px-3 py-1.5 text-xs text-rose-600 hover:text-rose-700"
+                        >
+                          Clear Response
+                        </button>
+                      )}
+                      <button
+                        onClick={() => toggleMarkForReview(currentQ.id)}
+                        className={`px-3 py-1.5 text-xs rounded-lg border font-medium ${
+                          isMarked
+                            ? 'border-purple-300 bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 font-bold'
+                            : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                        }`}
+                      >
+                        {isMarked ? '✓ Marked for Review' : 'Mark for Review'}
+                      </button>
                     </div>
+
                     <div className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded bg-purple-600" />
-                      <span>Marked for Review</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700" />
-                      <span>Unattempted</span>
+                      <button
+                        onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
+                        disabled={currentQuestionIndex === 0}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg disabled:opacity-30"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        <span>Previous</span>
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          setCurrentQuestionIndex(prev =>
+                            Math.min(activeTest.questions.length - 1, prev + 1)
+                          )
+                        }
+                        disabled={currentQuestionIndex === activeTest.questions.length - 1}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 dark:bg-amber-600 rounded-lg disabled:opacity-30"
+                      >
+                        <span>Save & Next</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 </div>
+              );
+            })()}
+          </div>
 
-                <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-                  <button
-                    onClick={() => {
-                      if (window.confirm('Ready to submit your mock test answers?')) {
-                        handleSubmitTest();
-                      }
-                    }}
-                    className="w-full py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-amber-600 dark:hover:bg-amber-500 rounded-lg shadow-xs"
-                  >
-                    Finish & View Scorecard
-                  </button>
-                </div>
+          {/* Question Palette Sidebar */}
+          <div className="w-full md:w-64 shrink-0 bg-slate-50 dark:bg-slate-950 p-5 border-t md:border-t-0 md:border-l border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+            <div>
+              <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-3">
+                Question Palette
+              </h4>
+              <div className="grid grid-cols-4 gap-2">
+                {activeTest.questions.map((q, idx) => {
+                  const isAnswered = selectedAnswers[q.id] !== undefined;
+                  const isMarked = markedForReview[q.id];
+                  const isCurrent = currentQuestionIndex === idx;
+
+                  let btnStyle = 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300';
+                  if (isMarked) {
+                    btnStyle = 'bg-purple-600 text-white border-purple-600';
+                  } else if (isAnswered) {
+                    btnStyle = 'bg-emerald-600 text-white border-emerald-600';
+                  }
+
+                  return (
+                    <button
+                      key={q.id}
+                      onClick={() => setCurrentQuestionIndex(idx)}
+                      className={`h-9 rounded-lg font-mono text-xs font-bold border transition-all ${btnStyle} ${
+                        isCurrent ? 'ring-2 ring-amber-500 ring-offset-1' : ''
+                      }`}
+                    >
+                      {idx + 1}
+                    </button>
+                  );
+                })}
               </div>
 
+              {/* Legend */}
+              <div className="mt-6 space-y-2 text-[11px] text-slate-500 dark:text-slate-400">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded bg-emerald-600" />
+                  <span>Answered</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded bg-purple-600" />
+                  <span>Marked for Review</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700" />
+                  <span>Unattempted</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+              <button
+                onClick={() => {
+                  if (window.confirm('Ready to submit your mock test answers?')) {
+                    handleSubmitTest();
+                  }
+                }}
+                className="w-full py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-amber-600 dark:hover:bg-amber-500 rounded-lg shadow-xs"
+              >
+                Finish & View Scorecard
+              </button>
             </div>
           </div>
+
         </div>
+        </Modal>
       )}
 
       {/* Post-Test Automated Scorecard Modal */}
       {completedAttempt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-2xl w-full p-6 space-y-5 my-8">
-            <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div>
-                <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
-                  Automated Grading Complete
-                </span>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white mt-1">
-                  {completedAttempt.testTitle}
-                </h3>
-              </div>
-              <button onClick={() => setCompletedAttempt(null)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+        <Modal title={<>{completedAttempt.testTitle}</>} onClose={() => setCompletedAttempt(null)} size="lg" bodyClassName="px-5 py-4 space-y-5">
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs">
-              <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                <span className="text-slate-400 block">Total Score</span>
-                <span className="text-xl font-mono font-bold text-slate-900 dark:text-white mt-1 block">
-                  {completedAttempt.score} / {completedAttempt.totalMarks}
-                </span>
-              </div>
-              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg">
-                <span className="text-emerald-700 dark:text-emerald-400 block">Accuracy</span>
-                <span className="text-xl font-mono font-bold text-emerald-800 dark:text-emerald-300 mt-1 block">
-                  {completedAttempt.accuracyPercentage}%
-                </span>
-              </div>
-              <div className="p-3 bg-rose-50 dark:bg-rose-950/30 rounded-lg">
-                <span className="text-rose-700 dark:text-rose-400 block">Incorrect (Penalty)</span>
-                <span className="text-xl font-mono font-bold text-rose-800 dark:text-rose-300 mt-1 block">
-                  {completedAttempt.incorrectAnswers}
-                </span>
-              </div>
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg">
-                <span className="text-amber-700 dark:text-amber-400 block">Batch Rank</span>
-                <span className="text-xl font-mono font-bold text-amber-800 dark:text-amber-300 mt-1 block">
-                  {completedAttempt.rankInBatch ? `#${completedAttempt.rankInBatch}` : "Preview"}
-                </span>
-              </div>
-            </div>
-
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-2 text-xs">
-              <span className="font-bold text-slate-900 dark:text-white block">Mentor Analysis & Recommended Actions:</span>
-              <ul className="list-disc pl-4 space-y-1 text-slate-600 dark:text-slate-400">
-                {completedAttempt.improvementAreas?.map((item, idx) => (
-                  <li key={idx}>{item}</li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                onClick={() => setCompletedAttempt(null)}
-                className="px-5 py-2 text-xs font-bold text-white bg-slate-900 dark:bg-amber-600 rounded-lg"
-              >
-                Close & Return to Dashboard
-              </button>
-            </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs">
+          <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+            <span className="text-slate-400 block">Total Score</span>
+            <span className="text-xl font-mono font-bold text-slate-900 dark:text-white mt-1 block">
+              {completedAttempt.score} / {completedAttempt.totalMarks}
+            </span>
+          </div>
+          <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg">
+            <span className="text-emerald-700 dark:text-emerald-400 block">Accuracy</span>
+            <span className="text-xl font-mono font-bold text-emerald-800 dark:text-emerald-300 mt-1 block">
+              {completedAttempt.accuracyPercentage}%
+            </span>
+          </div>
+          <div className="p-3 bg-rose-50 dark:bg-rose-950/30 rounded-lg">
+            <span className="text-rose-700 dark:text-rose-400 block">Incorrect (Penalty)</span>
+            <span className="text-xl font-mono font-bold text-rose-800 dark:text-rose-300 mt-1 block">
+              {completedAttempt.incorrectAnswers}
+            </span>
+          </div>
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg">
+            <span className="text-amber-700 dark:text-amber-400 block">Batch Rank</span>
+            <span className="text-xl font-mono font-bold text-amber-800 dark:text-amber-300 mt-1 block">
+              {completedAttempt.rankInBatch ? `#${completedAttempt.rankInBatch}` : "Preview"}
+            </span>
           </div>
         </div>
+
+        <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-2 text-xs">
+          <span className="font-bold text-slate-900 dark:text-white block">Mentor Analysis & Recommended Actions:</span>
+          <ul className="list-disc pl-4 space-y-1 text-slate-600 dark:text-slate-400">
+            {completedAttempt.improvementAreas?.map((item, idx) => (
+              <li key={idx}>{item}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="flex justify-end pt-2">
+          <button
+            onClick={() => setCompletedAttempt(null)}
+            className="px-5 py-2 text-xs font-bold text-white bg-slate-900 dark:bg-amber-600 rounded-lg"
+          >
+            Close & Return to Dashboard
+          </button>
+        </div>
+        </Modal>
       )}
 
     </div>

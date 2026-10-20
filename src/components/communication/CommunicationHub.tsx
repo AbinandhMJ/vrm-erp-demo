@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { Modal } from '../common/Modal';
 import { ExamAlert, AcademyAnnouncement } from '../../types';
 import {
   BellRing,
@@ -352,205 +353,189 @@ export const CommunicationHub: React.FC = () => {
 
       {/* Publish Exam Alert Modal */}
       {isPublishAlertOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Publish Government Exam Alert</h3>
-              <button onClick={() => setIsPublishAlertOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                <X className="w-4 h-4" />
-              </button>
+        <Modal title="Publish Government Exam Alert" onClose={() => setIsPublishAlertOpen(false)} size="md" bodyClassName="px-5 py-4 space-y-4">
+
+        <form onSubmit={handleCreateAlert} className="space-y-3 text-xs">
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Exam Name *</label>
+            <input
+              type="text"
+              value={examName}
+              onChange={e => setExamName(e.target.value)}
+              placeholder="e.g. UPSC CSE 2027 Notification"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Commission / Org</label>
+              <select
+                value={organization}
+                onChange={e => setOrganization(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              >
+                <option value="UPSC">UPSC</option>
+                <option value="TNPSC">TNPSC</option>
+                <option value="SSC">SSC</option>
+                <option value="State PSC">Other State PSC</option>
+              </select>
             </div>
 
-            <form onSubmit={handleCreateAlert} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Exam Name *</label>
-                <input
-                  type="text"
-                  value={examName}
-                  onChange={e => setExamName(e.target.value)}
-                  placeholder="e.g. UPSC CSE 2027 Notification"
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Commission / Org</label>
-                  <select
-                    value={organization}
-                    onChange={e => setOrganization(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  >
-                    <option value="UPSC">UPSC</option>
-                    <option value="TNPSC">TNPSC</option>
-                    <option value="SSC">SSC</option>
-                    <option value="State PSC">Other State PSC</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Expected Vacancies</label>
-                  <input
-                    type="text"
-                    value={vacancies}
-                    onChange={e => setVacancies(e.target.value)}
-                    placeholder="1,056 Posts"
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Publish Destination</label>
-                  <select
-                    value={targetAudience}
-                    onChange={e => setTargetAudience(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  >
-                    <option value="All">All (Students, Staff & Portal)</option>
-                    <option value="Students">Enrolled Students Only</option>
-                    <option value="Staff">Faculty & Staff</option>
-                    <option value="Website">Public Website Noticeboard</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Application Deadline</label>
-                  <input
-                    type="date"
-                    value={applicationDeadline}
-                    onChange={e => setApplicationDeadline(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Official Apply Link *</label>
-                <input
-                  type="url"
-                  value={applyUrl}
-                  onChange={e => setApplyUrl(e.target.value)}
-                  placeholder="https://upsconline.nic.in"
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Key Highlights (comma-separated)</label>
-                <input
-                  type="text"
-                  value={highlights}
-                  onChange={e => setHighlights(e.target.value)}
-                  placeholder="Prelims on May 24, Age 21-32..."
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsPublishAlertOpen(false)}
-                  className="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 font-semibold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg"
-                >
-                  Publish Alert
-                </button>
-              </div>
-            </form>
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Expected Vacancies</label>
+              <input
+                type="text"
+                value={vacancies}
+                onChange={e => setVacancies(e.target.value)}
+                placeholder="1,056 Posts"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              />
+            </div>
           </div>
-        </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Publish Destination</label>
+              <select
+                value={targetAudience}
+                onChange={e => setTargetAudience(e.target.value as any)}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              >
+                <option value="All">All (Students, Staff & Portal)</option>
+                <option value="Students">Enrolled Students Only</option>
+                <option value="Staff">Faculty & Staff</option>
+                <option value="Website">Public Website Noticeboard</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Application Deadline</label>
+              <input
+                type="date"
+                value={applicationDeadline}
+                onChange={e => setApplicationDeadline(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Official Apply Link *</label>
+            <input
+              type="url"
+              value={applyUrl}
+              onChange={e => setApplyUrl(e.target.value)}
+              placeholder="https://upsconline.nic.in"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Key Highlights (comma-separated)</label>
+            <input
+              type="text"
+              value={highlights}
+              onChange={e => setHighlights(e.target.value)}
+              placeholder="Prelims on May 24, Age 21-32..."
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setIsPublishAlertOpen(false)}
+              className="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-1.5 font-semibold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg"
+            >
+              Publish Alert
+            </button>
+          </div>
+        </form>
+        </Modal>
       )}
 
       {/* Internal Notice Modal */}
       {isPublishNoticeOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Publish Internal Announcement</h3>
-              <button onClick={() => setIsPublishNoticeOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                <X className="w-4 h-4" />
-              </button>
+        <Modal title="Publish Internal Announcement" onClose={() => setIsPublishNoticeOpen(false)} size="md" bodyClassName="px-5 py-4 space-y-4">
+
+        <form onSubmit={handleCreateNotice} className="space-y-3 text-xs">
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Announcement Title *</label>
+            <input
+              type="text"
+              value={annTitle}
+              onChange={e => setAnnTitle(e.target.value)}
+              placeholder="e.g. Schedule Change: Optional Class on Sunday"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Audience</label>
+              <select
+                value={annAudience}
+                onChange={e => setAnnAudience(e.target.value as any)}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              >
+                <option value="All">All Academy</option>
+                <option value="Students">Students Only</option>
+                <option value="Faculty">Faculty & Staff</option>
+              </select>
             </div>
 
-            <form onSubmit={handleCreateNotice} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Announcement Title *</label>
-                <input
-                  type="text"
-                  value={annTitle}
-                  onChange={e => setAnnTitle(e.target.value)}
-                  placeholder="e.g. Schedule Change: Optional Class on Sunday"
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Audience</label>
-                  <select
-                    value={annAudience}
-                    onChange={e => setAnnAudience(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  >
-                    <option value="All">All Academy</option>
-                    <option value="Students">Students Only</option>
-                    <option value="Faculty">Faculty & Staff</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Priority Level</label>
-                  <select
-                    value={annPriority}
-                    onChange={e => setAnnPriority(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  >
-                    <option value="normal">Normal</option>
-                    <option value="high">High Priority</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Notice Details *</label>
-                <textarea
-                  rows={3}
-                  value={annContent}
-                  onChange={e => setAnnContent(e.target.value)}
-                  placeholder="Full text of the announcement..."
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  required
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsPublishNoticeOpen(false)}
-                  className="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 font-semibold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg"
-                >
-                  Publish Notice
-                </button>
-              </div>
-            </form>
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Priority Level</label>
+              <select
+                value={annPriority}
+                onChange={e => setAnnPriority(e.target.value as any)}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              >
+                <option value="normal">Normal</option>
+                <option value="high">High Priority</option>
+              </select>
+            </div>
           </div>
-        </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Notice Details *</label>
+            <textarea
+              rows={3}
+              value={annContent}
+              onChange={e => setAnnContent(e.target.value)}
+              placeholder="Full text of the announcement..."
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+              required
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setIsPublishNoticeOpen(false)}
+              className="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-1.5 font-semibold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg"
+            >
+              Publish Notice
+            </button>
+          </div>
+        </form>
+        </Modal>
       )}
 
     </div>

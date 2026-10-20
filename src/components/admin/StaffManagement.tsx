@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { formatDate } from '../../lib/dates';
 import { useApp } from '../../context/AppContext';
+import { Modal } from '../common/Modal';
 import { StaffMember, SalaryPayout } from '../../types';
 import {
   Building2,
@@ -353,119 +354,111 @@ export const StaffManagement: React.FC = () => {
 
       {/* Onboard Staff Modal */}
       {isOnboardModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-sm font-bold text-slate-900">Onboard New Faculty / Staff Member</h3>
-              <button onClick={() => setIsOnboardModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-4 h-4" />
-              </button>
+        <Modal title="Onboard New Faculty / Staff Member" onClose={() => setIsOnboardModalOpen(false)} size="md" bodyClassName="px-5 py-4 space-y-4">
+
+        <form onSubmit={handleOnboardStaff} className="space-y-3 text-xs">
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Full Legal Name *</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Dr. Raghavan Swaminathan"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Department</label>
+              <select
+                value={department}
+                onChange={e => setDepartment(e.target.value as any)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+              >
+                <option value="Faculty">Academic Faculty</option>
+                <option value="Administration">Administration & Front Desk</option>
+                <option value="Counseling">Inbound Counseling & Outreach</option>
+                <option value="Finance">Finance & Fee Accounts</option>
+              </select>
             </div>
 
-            <form onSubmit={handleOnboardStaff} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Full Legal Name *</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="e.g. Dr. Raghavan Swaminathan"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Department</label>
-                  <select
-                    value={department}
-                    onChange={e => setDepartment(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  >
-                    <option value="Faculty">Academic Faculty</option>
-                    <option value="Administration">Administration & Front Desk</option>
-                    <option value="Counseling">Inbound Counseling & Outreach</option>
-                    <option value="Finance">Finance & Fee Accounts</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Designation Title</label>
-                  <input
-                    type="text"
-                    value={designation}
-                    onChange={e => setDesignation(e.target.value)}
-                    placeholder="Senior Faculty - Polity"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Official Mobile Phone</label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Official Email *</label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Agreed Monthly Salary (₹) *</label>
-                  <input
-                    type="number"
-                    value={monthlySalary}
-                    onChange={e => setMonthlySalary(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono tabular-nums"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Subjects Handling</label>
-                  <input
-                    type="text"
-                    value={subjects}
-                    onChange={e => setSubjects(e.target.value)}
-                    placeholder="Polity, Governance, IR"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsOnboardModalOpen(false)}
-                  className="px-3 py-1.5 text-slate-600 hover:text-slate-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg"
-                >
-                  Complete Onboarding
-                </button>
-              </div>
-            </form>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Designation Title</label>
+              <input
+                type="text"
+                value={designation}
+                onChange={e => setDesignation(e.target.value)}
+                placeholder="Senior Faculty - Polity"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+              />
+            </div>
           </div>
-        </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Official Mobile Phone</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Official Email *</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Agreed Monthly Salary (₹) *</label>
+              <input
+                type="number"
+                value={monthlySalary}
+                onChange={e => setMonthlySalary(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono tabular-nums"
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Subjects Handling</label>
+              <input
+                type="text"
+                value={subjects}
+                onChange={e => setSubjects(e.target.value)}
+                placeholder="Polity, Governance, IR"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setIsOnboardModalOpen(false)}
+              className="px-3 py-1.5 text-slate-600 hover:text-slate-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-1.5 font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg"
+            >
+              Complete Onboarding
+            </button>
+          </div>
+        </form>
+        </Modal>
       )}
 
     </div>

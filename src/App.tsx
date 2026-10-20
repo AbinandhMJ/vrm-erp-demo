@@ -21,6 +21,8 @@ import { AdmissionModal } from './components/admissions/AdmissionModal';
 import { ReceiptModal } from './components/common/ReceiptModal';
 import { ApplyPage } from './components/apply/ApplyPage';
 import { AdmissionForms } from './components/admissions/AdmissionForms';
+import { OnlineClasses } from './components/academics/OnlineClasses';
+import { LeaveManagement } from './components/admin/LeaveManagement';
 
 const MainLayout: React.FC = () => {
   const {
@@ -58,6 +60,10 @@ const MainLayout: React.FC = () => {
         return <LearningMaterials />;
       case 'tests':
         return <TestAssessment />;
+      case 'online_classes':
+        return <OnlineClasses />;
+      case 'leave':
+        return <LeaveManagement />;
       case 'fees':
         return <FeeManagement />;
       case 'reports':

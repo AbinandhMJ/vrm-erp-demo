@@ -1,7 +1,9 @@
 # VRM IAS Academy ERP: Demo
 
 A front-end-only demo of an academy ERP: enquiries → admissions → fees → classes → tests → reports.
-There is no backend: everything you enter is saved in the browser's `localStorage`.
+There is no backend and no third-party service: everything you enter is saved in the browser (`localStorage`, and
+IndexedDB for uploaded files). Fonts and the photo-reading (OCR) engine are bundled with the app, so it makes no outside
+requests. SMS/WhatsApp messages and online payments are simulated.
 
 The app **starts empty**: only logins, staff, courses, batches, the timetable and the question bank exist.
 Enroll students and capture leads yourself, or use **Load sample data** (login page, or the ↺ menu in the
@@ -55,6 +57,28 @@ everything pre-filled. Admission Forms also lists every admitted student's form 
 Students also get a **daily 2-question quiz** on their dashboard (same questions for everyone, rotating daily
 from the question bank); faculty see how many in each batch answered today.
 
+**Online classes** (YouTube Live, Google Meet or Zoom): staff schedule a one-time or repeating class (every day, or chosen
+weekdays until a last date) for all students or chosen batches. Before every session, the link goes to those students
+automatically (in-app, plus simulated SMS/WhatsApp) at the chosen time (15 min to 1 day before), and staff can also
+send it by hand. Students see upcoming classes and join links on their dashboard and in notifications; after a class,
+staff add the recording link. Sending is recorded in the browser while the app is open (nothing is actually sent).
+
+**Faculty with several subjects** pick a subject in their portal to see only that subject's classes and batches,
+attendance for that subject's classes, scores on that subject's test questions, and the students who need attention.
+Attendance records which subject was taught.
+
+**Leave & Holidays**: staff apply for casual, sick, earned or loss-of-pay leave (Sundays and holidays are not counted);
+management/office approve or reject with a note; approved leave appears on the month calendar and is marked on the staff
+attendance register (and not counted against attendance). Holidays are editable.
+
+**Learning materials**: authorised staff upload many files at once (PDF, Word, slides, images, video) and share them with
+all students, chosen batches or one student. Files are stored in the browser's IndexedDB; students open or download what is
+shared with them (on the same browser).
+
+**Question bank bulk import**: Excel/CSV (downloadable template), Word (.docx), PDF, a photo of a printed page (text is
+read on the device with Tesseract OCR, served from `public/ocr`, copied by `scripts/copy-ocr.mjs` before dev/build), or
+pasted text. Every question is shown for review and correction before it is added; duplicates are flagged.
+
 Use the ↺ menu in the header to load sample data or clear everything.
 
 ## How the data works
@@ -73,6 +97,8 @@ Use the ↺ menu in the header to load sample data or clear everything.
 - `src/config/access.ts`: which role can open which module (used by both the sidebar and the router).
 - `src/components/common/Modal.tsx`: every popup uses this (fixed header with close button, Esc/backdrop close,
   bottom sheet on phones). `src/components/charts/Charts.tsx`: chart kit (Recharts) used by dashboards and reports.
+- `src/lib/questionImport.ts`: question parsers; `src/lib/onlineClasses.ts`: class occurrences; `src/lib/leave.ts`:
+  working days and balances; `src/lib/fileStore.ts`: uploaded files in IndexedDB.
 - Storage keys are prefixed `vrm_erp_v3_`.
 
 Passwords are stored in plain text in `localStorage`. This is acceptable for a demo only.

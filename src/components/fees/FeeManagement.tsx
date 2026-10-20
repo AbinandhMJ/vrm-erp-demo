@@ -570,6 +570,7 @@ export const FeeManagement: React.FC = () => {
                     <th className="px-4 py-3">Payment Method</th>
                     <th className="px-4 py-3 font-mono">Date & Time</th>
                     <th className="px-4 py-3 text-right">Amount Paid (₹)</th>
+                    <th className="px-4 py-3 text-right whitespace-nowrap">Student: Total · Paid · Balance</th>
                     <th className="px-4 py-3">Audit Status</th>
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
@@ -617,6 +618,21 @@ export const FeeManagement: React.FC = () => {
 
                         <td className="px-4 py-3 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">
                           ₹{rcpt.amountPaid.toLocaleString('en-IN')}
+                        </td>
+
+                        <td className="px-4 py-3 text-right font-mono tabular-nums whitespace-nowrap">
+                          {studentObj ? (
+                            <>
+                              <div className="text-slate-700 dark:text-slate-300">
+                                ₹{studentObj.netFee.toLocaleString('en-IN')} · <span className="text-emerald-700 dark:text-emerald-400">₹{studentObj.paidFee.toLocaleString('en-IN')}</span>
+                              </div>
+                              <div className={`text-[11px] font-bold ${studentObj.balanceFee > 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                                {studentObj.balanceFee > 0 ? `₹${studentObj.balanceFee.toLocaleString('en-IN')} balance` : 'Fully paid'}
+                              </div>
+                            </>
+                          ) : (
+                            '—'
+                          )}
                         </td>
 
                         <td className="px-4 py-3">
@@ -723,18 +739,25 @@ export const FeeManagement: React.FC = () => {
                     {/* Financial balance breakdown card */}
                     <div className="grid grid-cols-3 gap-2 p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-lg text-center text-xs">
                       <div>
-                        <span className="text-[10px] text-slate-400 block">Course Fee</span>
-                        <span className="font-mono font-bold text-slate-800 dark:text-slate-200">₹{stu.totalFee.toLocaleString('en-IN')}</span>
+                        <span className="text-[10px] text-slate-400 block">Total Fee</span>
+                        <span className="font-mono font-bold text-slate-800 dark:text-slate-200">₹{stu.netFee.toLocaleString('en-IN')}</span>
                       </div>
                       <div>
-                        <span className="text-[10px] text-slate-400 block">Scholarship</span>
-                        <span className="font-mono font-bold text-amber-700 dark:text-amber-400">₹{stu.discountAmount.toLocaleString('en-IN')}</span>
+                        <span className="text-[10px] text-slate-400 block">Paid</span>
+                        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">₹{stu.paidFee.toLocaleString('en-IN')}</span>
                       </div>
                       <div>
-                        <span className="text-[10px] text-slate-400 block">Balance Due</span>
-                        <span className="font-mono font-bold text-rose-700 dark:text-rose-400">₹{stu.balanceFee.toLocaleString('en-IN')}</span>
+                        <span className="text-[10px] text-slate-400 block">Balance</span>
+                        <span className={`font-mono font-bold ${stu.balanceFee > 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                          ₹{stu.balanceFee.toLocaleString('en-IN')}
+                        </span>
                       </div>
                     </div>
+                    {stu.discountAmount > 0 && (
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Course fee ₹{stu.totalFee.toLocaleString('en-IN')} less scholarship ₹{stu.discountAmount.toLocaleString('en-IN')}
+                      </p>
+                    )}
                   </div>
 
                   <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
@@ -846,6 +869,14 @@ export const FeeManagement: React.FC = () => {
                           {!isPaid && inv.paidAmount > 0 && (
                             <div className="text-[10px] font-normal text-slate-500">₹{invoiceBalance(inv).toLocaleString('en-IN')} left</div>
                           )}
+                          {(() => {
+                            const st = students.find(x => x.id === inv.studentId);
+                            return st ? (
+                              <div className="text-[10px] font-normal text-slate-500 whitespace-nowrap">
+                                Student balance ₹{st.balanceFee.toLocaleString('en-IN')} of ₹{st.netFee.toLocaleString('en-IN')}
+                              </div>
+                            ) : null;
+                          })()}
                         </td>
 
                         <td className="px-4 py-3">
@@ -1096,6 +1127,28 @@ export const FeeManagement: React.FC = () => {
                   </option>
                 ))}
             </select>
+            {(() => {
+              const st = students.find(x => x.id === directPayStudentId);
+              return st ? (
+                <div className="mt-2 grid grid-cols-3 gap-2 text-center text-[11px] p-2 rounded-lg bg-slate-50 dark:bg-slate-800">
+                  <span>
+                    Total
+                    <br />
+                    <b className="font-mono">₹{st.netFee.toLocaleString('en-IN')}</b>
+                  </span>
+                  <span>
+                    Paid
+                    <br />
+                    <b className="font-mono text-emerald-700 dark:text-emerald-400">₹{st.paidFee.toLocaleString('en-IN')}</b>
+                  </span>
+                  <span>
+                    Balance
+                    <br />
+                    <b className="font-mono text-rose-700 dark:text-rose-400">₹{st.balanceFee.toLocaleString('en-IN')}</b>
+                  </span>
+                </div>
+              ) : null;
+            })()}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -1221,6 +1274,17 @@ export const FeeManagement: React.FC = () => {
               ₹{selectedInvoiceForPayment.amount.toLocaleString('en-IN')} / ₹{selectedInvoiceForPayment.paidAmount.toLocaleString('en-IN')}
             </span>
           </div>
+          {(() => {
+            const st = students.find(x => x.id === selectedInvoiceForPayment.studentId);
+            return st ? (
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-500">Student total · paid · balance:</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200 text-right">
+                  ₹{st.netFee.toLocaleString('en-IN')} · ₹{st.paidFee.toLocaleString('en-IN')} · ₹{st.balanceFee.toLocaleString('en-IN')}
+                </span>
+              </div>
+            ) : null;
+          })()}
           <div className="flex justify-between pt-1 border-t border-slate-200 dark:border-slate-700">
             <span className="font-bold text-slate-700 dark:text-slate-300">Balance on this installment:</span>
             <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 text-sm">

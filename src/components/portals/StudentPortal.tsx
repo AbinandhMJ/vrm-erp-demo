@@ -5,6 +5,10 @@ import { Invoice } from '../../types';
 import { addDays, formatDate, weekdayOf } from '../../lib/dates';
 import { invoiceBalance } from '../../lib/fees';
 import { DailyQuizCard } from './DailyQuizCard';
+import { UpcomingOnlineClassesCard } from '../academics/OnlineClasses';
+import { PhotoPicker } from '../common/PhotoPicker';
+import { materialIsFor } from '../../lib/materials';
+import { openStoredFile } from '../../lib/fileStore';
 import {
   GraduationCap,
   Calendar,
@@ -42,8 +46,11 @@ export const StudentPortal: React.FC = () => {
     viewReceipt,
     setActiveTab,
     createSupportTicket,
+    updateStudentPhoto,
     today
   } = useApp();
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const [photoDraft, setPhotoDraft] = useState<string | undefined>(undefined);
 
   // Staff can open this portal in "view as" mode for any student.
   const [viewAsId, setViewAsId] = useState<string>('');
@@ -74,11 +81,7 @@ export const StudentPortal: React.FC = () => {
   const mySchedule = schedule
     .filter(s => s.batchId === currentStudent?.enrolledBatchId)
     .sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day));
-  const myMaterials = materials.filter(m =>
-    m.targetScope === 'all' ||
-    (m.targetScope === 'batch' && m.targetBatchId === currentStudent?.enrolledBatchId) ||
-    (m.targetScope === 'individual' && m.targetStudentId === currentStudent?.id)
-  );
+  const myMaterials = materials.filter(m => materialIsFor(m, currentStudent));
 
   // Next class: first timetable slot from today onwards.
   const nextClass = useMemo(() => {
@@ -207,9 +210,28 @@ export const StudentPortal: React.FC = () => {
       <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-md border border-slate-800">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-400 font-bold text-xl flex items-center justify-center border border-amber-500/30 shrink-0">
-              {currentStudent?.name.charAt(0)}
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setPhotoDraft(currentStudent?.photo);
+                setPhotoOpen(true);
+              }}
+              title={currentStudent?.photo ? 'Change photo' : 'Add your photo'}
+              aria-label={currentStudent?.photo ? 'Change photo' : 'Add your photo'}
+              className="relative w-16 h-20 rounded-xl overflow-hidden bg-amber-500/20 text-amber-400 font-bold text-xl flex items-center justify-center border border-amber-500/30 shrink-0 group"
+            >
+              {currentStudent?.photo ? (
+                <img src={currentStudent.photo} alt={currentStudent.name} className="w-full h-full object-cover" />
+              ) : (
+                <span className="flex flex-col items-center leading-none">
+                  {currentStudent?.name.charAt(0)}
+                  <span className="text-[9px] font-semibold mt-1 text-amber-200">Add photo</span>
+                </span>
+              )}
+              <span className="absolute inset-x-0 bottom-0 text-[9px] bg-black/60 text-white py-0.5 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                Change
+              </span>
+            </button>
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-mono text-amber-300 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
@@ -318,6 +340,7 @@ export const StudentPortal: React.FC = () => {
       {activeSubTab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
+          <UpcomingOnlineClassesCard batchId={currentStudent.enrolledBatchId} />
           <DailyQuizCard studentId={currentStudent.id} readOnly={isViewAs} />
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-2xs space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
@@ -934,14 +957,34 @@ export const StudentPortal: React.FC = () => {
                 </div>
 
                 <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                  <span className="font-mono text-slate-400 dark:text-slate-500 text-[11px]">{mat.pageCount} Pages · {mat.fileSize}</span>
-                  <button
-                    onClick={() => setActiveTab('materials')}
-                    className="inline-flex items-center gap-1 text-amber-800 dark:text-amber-400 font-semibold hover:underline"
-                  >
-                    <span>Read PDF Digest</span>
-                    <ArrowRight className="w-3 h-3" />
-                  </button>
+                  <span className="font-mono text-slate-400 dark:text-slate-500 text-[11px]">
+                    {mat.pageCount ? `${mat.pageCount} Pages · ` : ''}
+                    {mat.fileSize}
+                  </span>
+                  {mat.fileId ? (
+                    <span className="flex gap-3">
+                      <button
+                        onClick={() => openStoredFile(mat.fileId!, mat.fileName || mat.title)}
+                        className="inline-flex items-center gap-1 text-amber-800 dark:text-amber-400 font-semibold hover:underline"
+                      >
+                        Open
+                      </button>
+                      <button
+                        onClick={() => openStoredFile(mat.fileId!, mat.fileName || mat.title, true)}
+                        className="inline-flex items-center gap-1 text-slate-700 dark:text-slate-300 font-semibold hover:underline"
+                      >
+                        <Download className="w-3 h-3" /> Download
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setActiveTab('materials')}
+                      className="inline-flex items-center gap-1 text-amber-800 dark:text-amber-400 font-semibold hover:underline"
+                    >
+                      <span>Read digest</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -950,6 +993,36 @@ export const StudentPortal: React.FC = () => {
       )}
 
       {/* Raise Mentor Query / Support Modal */}
+      {photoOpen && currentStudent && (
+        <Modal
+          title={currentStudent.photo ? 'Change your photo' : 'Add your photo'}
+          subtitle="A clear passport-size photo. It appears on your ID, admission form and portal."
+          onClose={() => setPhotoOpen(false)}
+          size="sm"
+          footer={
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setPhotoOpen(false)} className="px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  updateStudentPhoto(currentStudent.id, photoDraft);
+                  setPhotoOpen(false);
+                }}
+                className="px-4 py-2 text-xs font-bold text-white bg-slate-900 dark:bg-amber-600 rounded-lg"
+              >
+                Save photo
+              </button>
+            </div>
+          }
+        >
+          <div className="flex flex-col items-center gap-2">
+            <PhotoPicker value={photoDraft} onChange={setPhotoDraft} alt="Your photo" label="Choose or take a photo" />
+            <p className="text-[11px] text-slate-500 text-center">On a phone you can take the photo with the camera. It is resized to passport size before saving.</p>
+          </div>
+        </Modal>
+      )}
+
       {isTicketModalOpen && (
         <Modal title="Raise Query to Faculty / Administration" onClose={() => setIsTicketModalOpen(false)} size="sm" bodyClassName="px-5 py-4 space-y-4">
 

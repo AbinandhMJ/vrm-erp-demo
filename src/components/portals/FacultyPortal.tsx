@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Clock, CheckCircle2, Upload, AlertTriangle } from 'lucide-react';
+import { Clock, CheckCircle2, Upload, AlertTriangle, BookOpen, Video, ChevronDown, ChevronUp } from 'lucide-react';
 import { formatDate, weekdayOf } from '../../lib/dates';
+import { sameSubject } from '../../lib/subjects';
+import { Avatar } from '../common/PhotoPicker';
 
 type Mark = 'present' | 'absent' | 'late';
 
@@ -18,6 +20,9 @@ export const FacultyPortal: React.FC = () => {
     staffMembers,
     currentStaff,
     dailyQuizAttempts,
+    attendance,
+    studentAttempts,
+    onlineClasses,
     today
   } = useApp();
 
@@ -33,13 +38,36 @@ export const FacultyPortal: React.FC = () => {
     return batches.filter(b => b.leadFacultyId === currentFaculty.id || taught.has(b.id));
   }, [batches, schedule, currentFaculty]);
 
-  const todaysClasses = schedule.filter(s => s.facultyName === currentFaculty?.name && s.day === weekdayOf(today));
+  const mySlots = schedule.filter(s => s.facultyName === currentFaculty?.name);
+  // Subjects this faculty teaches: from the timetable first, then any listed on their profile.
+  const mySubjects = useMemo(() => {
+    const fromSlots = [...new Set(mySlots.map(s => s.subject))];
+    const extra = (currentFaculty?.subjectsHandling || []).filter(h => !fromSlots.some(f => sameSubject(f, h)));
+    return [...fromSlots, ...extra];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schedule, currentFaculty]);
+  const [subjectFilter, setSubjectFilter] = useState<string>('all');
+  const activeSubject = mySubjects.includes(subjectFilter) ? subjectFilter : 'all';
+  const inSubject = (subject: string) => activeSubject === 'all' || sameSubject(subject, activeSubject);
+
+  const todaysClasses = mySlots.filter(s => s.day === weekdayOf(today) && inSubject(s.subject));
 
   const [selectedBatchId, setSelectedBatchId] = useState('');
   const batchId = myBatches.some(b => b.id === selectedBatchId) ? selectedBatchId : myBatches[0]?.id || '';
   const [attendanceDate, setAttendanceDate] = useState(today);
   const slotForDay = schedule.find(s => s.batchId === batchId && s.day === weekdayOf(attendanceDate));
   const [lectureTopic, setLectureTopic] = useState('');
+  // Subjects this faculty teaches in the selected batch (for recording which subject the class was).
+  const batchSubjects = [...new Set(mySlots.filter(s => s.batchId === batchId).map(s => s.subject))];
+  const subjectChoices = batchSubjects.length ? batchSubjects : mySubjects;
+  const [attSubject, setAttSubject] = useState('');
+  const sessionSubject = subjectChoices.includes(attSubject)
+    ? attSubject
+    : slotForDay && slotForDay.facultyName === currentFaculty?.name
+      ? slotForDay.subject
+      : activeSubject !== 'all' && subjectChoices.includes(activeSubject)
+        ? activeSubject
+        : subjectChoices[0] || 'General';
 
   const batchStudents = students
     .filter(s => s.enrolledBatchId === batchId && s.admissionDate <= attendanceDate && s.status === 'active')
@@ -55,6 +83,7 @@ export const FacultyPortal: React.FC = () => {
     setAttendanceStatuses(existing || {});
     setAlreadyRecorded(!!existing);
     setLectureTopic(slotForDay?.topic || '');
+    setAttSubject('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batchId, attendanceDate]);
 
@@ -74,7 +103,7 @@ export const FacultyPortal: React.FC = () => {
       rollNumber: s.rollNumber,
       status: attendanceStatuses[s.id] || ('present' as Mark)
     }));
-    recordBatchAttendance(batchId, attendanceDate, slotForDay?.subject || currentFaculty?.subjectsHandling?.[0] || 'General', records);
+    recordBatchAttendance(batchId, attendanceDate, sessionSubject, records);
     setAlreadyRecorded(true);
     setIsAttendanceSaved(true);
     setTimeout(() => setIsAttendanceSaved(false), 3000);
@@ -88,7 +117,8 @@ export const FacultyPortal: React.FC = () => {
     { present: 0, late: 0, absent: 0 } as Record<Mark, number>
   );
 
-  const batchOverview = myBatches.map(b => {
+  const subjectBatchIds = new Set(mySlots.filter(x => inSubject(x.subject)).map(x => x.batchId));
+  const batchOverview = myBatches.filter(b => activeSubject === 'all' || subjectBatchIds.has(b.id)).map(b => {
     const roster = students.filter(s => s.enrolledBatchId === b.id);
     const avgAtt = roster.length ? Math.round((roster.reduce((sum, s) => sum + s.attendancePercentage, 0) / roster.length) * 10) / 10 : 0;
     const tested = roster.filter(s => s.averageTestScore > 0);
@@ -193,6 +223,44 @@ export const FacultyPortal: React.FC = () => {
         </div>
       </div>
 
+      {/* Subject switcher: faculty who teach several subjects work one subject at a time */}
+      {mySubjects.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-2xs space-y-2" data-subject-switcher>
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-white">
+            <BookOpen className="w-4 h-4 text-emerald-600" /> My subjects ({mySubjects.length})
+            <span className="font-normal text-slate-500">Pick one to see only its classes, batches and student performance.</span>
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {['all', ...mySubjects].map(sub => {
+              const weekly = sub === 'all' ? mySlots.length : mySlots.filter(x => sameSubject(x.subject, sub)).length;
+              return (
+                <button
+                  key={sub}
+                  onClick={() => setSubjectFilter(sub)}
+                  aria-pressed={activeSubject === sub}
+                  className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold border whitespace-nowrap ${
+                    activeSubject === sub
+                      ? 'bg-emerald-600 border-emerald-600 text-white'
+                      : 'border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {sub === 'all' ? 'All subjects' : sub}
+                  <span className={`ml-1.5 text-[10px] ${activeSubject === sub ? 'text-emerald-100' : 'text-slate-400'}`}>{weekly}/wk</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <SubjectPerformance
+        subjects={activeSubject === 'all' ? mySubjects : [activeSubject]}
+        slots={mySlots}
+        onPick={setSubjectFilter}
+        compact={activeSubject === 'all'}
+        facultyName={currentFaculty.name}
+      />
+
       {/* My batches at a glance */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-2xs space-y-4">
         <h3 className="text-sm font-bold text-slate-900 dark:text-white">My Batches: Student Performance</h3>
@@ -254,7 +322,7 @@ export const FacultyPortal: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
           <div>
             <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Batch</label>
             <select
@@ -265,6 +333,7 @@ export const FacultyPortal: React.FC = () => {
               {myBatches.map(b => (
                 <option key={b.id} value={b.id}>
                   {b.name}
+                  {activeSubject !== 'all' && !subjectBatchIds.has(b.id) ? ' (other subject)' : ''}
                 </option>
               ))}
             </select>
@@ -280,9 +349,22 @@ export const FacultyPortal: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Topic {slotForDay ? `(${slotForDay.subject})` : ''}
-            </label>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Subject</label>
+            <select
+              value={sessionSubject}
+              onChange={e => setAttSubject(e.target.value)}
+              aria-label="Subject taught"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+            >
+              {subjectChoices.map(sub => (
+                <option key={sub} value={sub}>
+                  {sub}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Topic</label>
             <input
               type="text"
               value={lectureTopic}
@@ -399,6 +481,187 @@ export const FacultyPortal: React.FC = () => {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+};
+
+type PerfRow = {
+  batchId: string;
+  batchName: string;
+  students: { id: string; name: string; roll: string; photo?: string; att: number | null; score: number | null }[];
+  sessions: number;
+  avgAtt: number | null;
+  avgScore: number | null;
+};
+
+const pctOrDash = (v: number | null) => (v === null ? '—' : `${v}%`);
+const avg = (xs: number[]) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null);
+
+/** Per-subject view for faculty: attendance in that subject's classes and scores on that subject's questions, per batch. */
+const SubjectPerformance: React.FC<{
+  subjects: string[];
+  slots: ReturnType<typeof useApp>['schedule'];
+  onPick: (s: string) => void;
+  compact: boolean;
+  facultyName: string;
+}> = ({ subjects, slots, onPick, compact, facultyName }) => {
+  const { students, batches, attendance, studentAttempts, onlineClasses, assessmentTests, today } = useApp();
+  const [openBatch, setOpenBatch] = useState<string | null>(null);
+  const testById = useMemo(() => new Map(assessmentTests.map(t => [t.id, t])), [assessmentTests]);
+
+  const perf = (subject: string): PerfRow[] => {
+    const batchIds = [...new Set(slots.filter(x => sameSubject(x.subject, subject)).map(x => x.batchId))];
+    return batchIds.map(batchId => {
+      const roster = students.filter(st => st.enrolledBatchId === batchId && st.status === 'active');
+      const sessions = attendance.filter(a => a.batchId === batchId && sameSubject(a.subject, subject));
+      const rows = roster.map(st => {
+        const held = sessions.filter(a => a.date >= st.admissionDate);
+        const absent = held.filter(a => a.absentIds.includes(st.id)).length;
+        const att = held.length ? Math.round(((held.length - absent) / held.length) * 1000) / 10 : null;
+        let got = 0;
+        let tot = 0;
+        // Marks on this subject's questions only, from each test the student took.
+        studentAttempts
+          .filter(a => a.studentId === st.id)
+          .forEach(a => {
+            const test = testById.get(a.testId);
+            test?.questions
+              .filter(q => sameSubject(q.subject, subject))
+              .forEach(q => {
+                tot += q.marks;
+                const ans = a.userAnswers[q.id];
+                if (ans === undefined) return;
+                got += ans === q.correctOptionIndex ? q.marks : -(q.negativeMarks ?? test.negativeMarksPerWrong);
+              });
+          });
+        const score = tot > 0 ? Math.round((Math.max(0, got) / tot) * 1000) / 10 : null;
+        return { id: st.id, name: st.name, roll: st.rollNumber, photo: st.photo, att, score };
+      });
+      return {
+        batchId,
+        batchName: batches.find(b => b.id === batchId)?.name || batchId,
+        students: rows,
+        sessions: sessions.length,
+        avgAtt: avg(rows.flatMap(r => (r.att === null ? [] : [r.att]))),
+        avgScore: avg(rows.flatMap(r => (r.score === null ? [] : [r.score])))
+      };
+    });
+  };
+
+  const needsAttention = (r: PerfRow['students'][number]) => (r.att !== null && r.att < 75) || (r.score !== null && r.score < 40);
+  const upcomingOnline = (subject: string) =>
+    onlineClasses.filter(c => c.facultyName === facultyName && sameSubject(c.subject, subject) && (c.repeat === 'none' ? c.startDate >= today : !c.endDate || c.endDate >= today)).length;
+
+  if (subjects.length === 0) return null;
+
+  if (compact)
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" data-subject-cards>
+        {subjects.map(sub => {
+          const rows = perf(sub);
+          const all = rows.flatMap(r => r.students);
+          const flagged = all.filter(needsAttention).length;
+          return (
+            <button
+              key={sub}
+              onClick={() => onPick(sub)}
+              className="text-left p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500 shadow-2xs space-y-2"
+            >
+              <div className="text-sm font-bold text-slate-900 dark:text-white">{sub}</div>
+              <div className="text-[11px] text-slate-500">
+                {rows.length} batch{rows.length === 1 ? '' : 'es'} · {all.length} students · {slots.filter(x => sameSubject(x.subject, sub)).length} classes/week
+                {upcomingOnline(sub) > 0 && ` · ${upcomingOnline(sub)} online`}
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div>
+                  <div className="text-[10px] text-slate-400">Attendance</div>
+                  <div className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{pctOrDash(avg(rows.flatMap(r => (r.avgAtt === null ? [] : [r.avgAtt]))))}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-400">Test score</div>
+                  <div className="font-mono font-bold text-amber-600 dark:text-amber-400">{pctOrDash(avg(rows.flatMap(r => (r.avgScore === null ? [] : [r.avgScore]))))}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-400">Need help</div>
+                  <div className={`font-mono font-bold ${flagged ? 'text-rose-600' : 'text-slate-500'}`}>{flagged}</div>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    );
+
+  const sub = subjects[0];
+  const rows = perf(sub);
+  return (
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-2xs space-y-4" data-subject-detail>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">{sub}: student performance</h3>
+          <p className="text-[11px] text-slate-500">
+            Attendance counts only this subject's classes. Scores count only this subject's questions in tests.
+            {upcomingOnline(sub) > 0 && (
+              <span className="inline-flex items-center gap-1 ml-1">
+                <Video className="w-3 h-3" /> {upcomingOnline(sub)} online class schedule{upcomingOnline(sub) > 1 ? 's' : ''}
+              </span>
+            )}
+          </p>
+        </div>
+      </div>
+      {rows.length === 0 && <p className="text-xs text-slate-500">No batch has this subject with you on the timetable yet.</p>}
+      <div className="space-y-2">
+        {rows.map(r => {
+          const flagged = r.students.filter(needsAttention);
+          const open = openBatch === r.batchId;
+          const list = (open ? r.students : flagged).slice().sort((a, b) => (a.score ?? 101) - (b.score ?? 101));
+          return (
+            <div key={r.batchId} className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+              <button
+                onClick={() => setOpenBatch(open ? null : r.batchId)}
+                className="w-full p-3 flex flex-col sm:flex-row sm:items-center gap-2 text-left text-xs bg-slate-50 dark:bg-slate-800/60"
+                aria-expanded={open}
+              >
+                <span className="flex-1 font-semibold text-slate-900 dark:text-white">{r.batchName}</span>
+                <span className="text-slate-500">{r.students.length} students · {r.sessions} classes held</span>
+                <span className="font-mono text-emerald-700 dark:text-emerald-400">Att {pctOrDash(r.avgAtt)}</span>
+                <span className="font-mono text-amber-700 dark:text-amber-400">Score {pctOrDash(r.avgScore)}</span>
+                <span className={`font-semibold ${flagged.length ? 'text-rose-600' : 'text-slate-500'}`}>{flagged.length} need help</span>
+                {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {list.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-slate-500 text-left">
+                      <tr>
+                        <th className="px-3 py-1.5 font-semibold">{open ? 'All students' : 'Students needing attention'}</th>
+                        <th className="px-3 py-1.5 font-semibold">Subject attendance</th>
+                        <th className="px-3 py-1.5 font-semibold">Subject score</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {list.map(st => (
+                        <tr key={st.id}>
+                          <td className="px-3 py-1.5">
+                            <span className="inline-flex items-center gap-2">
+                              <Avatar photo={st.photo} name={st.name} className="w-6 h-6 text-[10px]" />
+                              <span className="font-semibold text-slate-900 dark:text-white">{st.name}</span>
+                              <span className="font-mono text-slate-400">{st.roll}</span>
+                            </span>
+                          </td>
+                          <td className={`px-3 py-1.5 font-mono ${st.att !== null && st.att < 75 ? 'text-rose-600 font-bold' : 'text-slate-700 dark:text-slate-300'}`}>{pctOrDash(st.att)}</td>
+                          <td className={`px-3 py-1.5 font-mono ${st.score !== null && st.score < 40 ? 'text-rose-600 font-bold' : 'text-slate-700 dark:text-slate-300'}`}>{pctOrDash(st.score)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {!open && flagged.length === 0 && <p className="px-3 py-2 text-[11px] text-slate-500">Everyone is above 75% attendance and 40% score. Click to see all students.</p>}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

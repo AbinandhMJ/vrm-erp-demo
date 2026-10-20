@@ -1,10 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { Copy, ExternalLink, FileText, Pencil, Search, UserPlus } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { AdmissionFormValues, Lead, Student } from '../../types';
+import { Lead, Student } from '../../types';
 import { formatDate } from '../../lib/dates';
-import { Modal } from '../common/Modal';
-import { AdmissionFormFields, formFromStudent, validateAdmissionForm } from './AdmissionFormFields';
+import { EditStudentModal } from './EditStudentModal';
 import { AdmissionFormPrint, PrintableAdmissionForm, printableFromApplication, printableFromStudent } from './AdmissionFormPrint';
 
 // Details the office should complete on every form (photo is tracked separately).
@@ -20,14 +19,12 @@ const missingFor = (s: Student) => OPTIONAL_FIELDS.filter(([k]) => !s[k]).map(([
 
 /** Every admission form in one place: online applications waiting for admission, and admitted students' forms. */
 export const AdmissionForms: React.FC = () => {
-  const { leads, students, courses, batches, openModal, updateStudentForm, today } = useApp();
+  const { leads, students, courses, batches, openModal, today } = useApp();
   const [view, setView] = useState<'applications' | 'students'>('applications');
   const [query, setQuery] = useState('');
   const [appFilter, setAppFilter] = useState<'pending' | 'admitted' | 'all'>('pending');
   const [printing, setPrinting] = useState<PrintableAdmissionForm | null>(null);
   const [editing, setEditing] = useState<Student | null>(null);
-  const [editValues, setEditValues] = useState<AdmissionFormValues | null>(null);
-  const [editError, setEditError] = useState('');
   const [copied, setCopied] = useState(false);
   const [shown, setShown] = useState(40);
 
@@ -62,18 +59,7 @@ export const AdmissionForms: React.FC = () => {
     }
   };
 
-  const startEdit = (s: Student) => {
-    setEditing(s);
-    setEditValues(formFromStudent(s));
-    setEditError('');
-  };
-  const saveEdit = () => {
-    if (!editing || !editValues) return;
-    const err = validateAdmissionForm(editValues);
-    if (err) return setEditError(err);
-    updateStudentForm(editing.id, editValues);
-    setEditing(null);
-  };
+  const startEdit = (s: Student) => setEditing(s);
 
   const kpi = 'p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl';
   const tabBtn = (active: boolean) =>
@@ -302,40 +288,7 @@ export const AdmissionForms: React.FC = () => {
 
       {printing && <AdmissionFormPrint form={printing} onClose={() => setPrinting(null)} />}
 
-      {editing && editValues && (
-        <Modal
-          title="Edit admission form"
-          subtitle={`${editing.name} · ${editing.rollNumber}`}
-          onClose={() => setEditing(null)}
-          size="xl"
-          bodyClassName="px-5 py-4"
-          footer={
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              {editError && <span className="mr-auto text-xs text-rose-600">{editError}</span>}
-              <button onClick={() => setEditing(null)} className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
-                Cancel
-              </button>
-              <button onClick={saveEdit} className="px-4 py-2 text-xs font-bold rounded-lg text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500">
-                Save changes
-              </button>
-            </div>
-          }
-        >
-          <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
-            Course and batch can't be changed here. The student's login username stays the same.
-          </p>
-          <AdmissionFormFields
-            value={editValues}
-            onChange={p => {
-              setEditValues(v => (v ? { ...v, ...p } : v));
-              setEditError('');
-            }}
-            courses={courses}
-            batches={batches}
-            batchMode="locked"
-          />
-        </Modal>
-      )}
+      {editing && <EditStudentModal student={editing} onClose={() => setEditing(null)} />}
     </div>
   );
 };

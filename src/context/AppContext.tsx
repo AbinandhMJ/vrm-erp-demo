@@ -27,7 +27,12 @@ import {
   UserRole,
   DailyQuizAttempt,
   AdmissionFormValues,
-  OnlineApplication
+  OnlineApplication,
+  LeaveRequest,
+  Holiday,
+  OnlineClass,
+  ClassReminder,
+  AcademySettings
 } from '../types';
 import {
   INITIAL_ANNOUNCEMENTS,
@@ -41,6 +46,10 @@ import {
 } from '../data/mockData';
 import { buildBaseData, buildSeed, DEMO_PERSONA_ACCOUNT_IDS, SeedData, studentDefaultPassword } from '../data/seed';
 import { pickDailyQuestions } from '../lib/dailyQuiz';
+import { buildSampleExtras, YOUTUBE_CHANNEL } from '../data/sampleExtras';
+import { DEFAULT_HOLIDAYS, workingDaysIn } from '../lib/leave';
+import { classIsFor, occurrenceKey, occurrencesBetween } from '../lib/onlineClasses';
+import { clearFiles, deleteFile } from '../lib/fileStore';
 import { canAccess, HOME_TAB } from '../config/access';
 import { nowDisplay, todayISO } from '../lib/dates';
 import {
@@ -136,6 +145,11 @@ interface AppContextType {
   visibleExamAlerts: ExamAlert[];
   visibleAnnouncements: AcademyAnnouncement[];
   tickets: SupportTicket[];
+  leaveRequests: LeaveRequest[];
+  holidays: Holiday[];
+  onlineClasses: OnlineClass[];
+  classReminders: ClassReminder[];
+  settings: AcademySettings;
 
   // Actions
   addLead: (lead: Partial<Lead>) => Lead;
@@ -156,7 +170,31 @@ interface AppContextType {
   ) => void;
   /** Per-student status for a given batch/date, if attendance was already taken. */
   getSessionStatuses: (batchId: string, date: string) => Record<string, 'present' | 'absent' | 'late'> | null;
-  addStudyMaterial: (material: Omit<StudyMaterial, 'id' | 'uploadedAt'>) => void;
+  addStudyMaterial: (material: Omit<StudyMaterial, 'id' | 'uploadedAt'>) => StudyMaterial;
+  deleteStudyMaterial: (materialId: string) => void;
+  /** Adds many reviewed questions at once (bulk import). */
+  importQuestions: (questions: Omit<Question, 'id'>[]) => number;
+  /** Student updates their own passport photo. */
+  updateStudentPhoto: (studentId: string, photo: string | undefined) => void;
+  updateStaffMember: (staffId: string, patch: Partial<Omit<StaffMember, 'id' | 'attendanceRate'>>) => void;
+
+  // Leave
+  applyLeave: (data: Pick<LeaveRequest, 'staffId' | 'type' | 'from' | 'to' | 'reason' | 'halfDay'>) => LeaveRequest | { error: string };
+  decideLeave: (leaveId: string, status: 'approved' | 'rejected', note?: string) => void;
+  cancelLeave: (leaveId: string) => void;
+  addHoliday: (date: string, name: string) => void;
+  removeHoliday: (holidayId: string) => void;
+
+  // Online classes
+  saveOnlineClass: (cls: Omit<OnlineClass, 'id' | 'createdAt' | 'createdBy' | 'cancelledDates' | 'recordings'> & { id?: string }) => OnlineClass;
+  deleteOnlineClass: (classId: string) => void;
+  setOccurrenceCancelled: (classId: string, date: string, cancelled: boolean) => void;
+  setRecordingLink: (classId: string, date: string, link: string) => void;
+  /** Sends (simulated SMS/WhatsApp + in-app) the class link to its students now. */
+  sendClassReminder: (classId: string, date: string) => ClassReminder;
+  /** Number of students a class is meant for. */
+  classAudienceSize: (cls: OnlineClass) => number;
+  updateSettings: (patch: Partial<AcademySettings>) => void;
 
   addQuestionToBank: (question: Omit<Question, 'id'>) => Question;
   updateQuestionInBank: (questionId: string, updated: Partial<Question>) => void;
@@ -258,6 +296,11 @@ function clearOwnStorage() {
   }
 }
 
+const defaultHolidays = (): Holiday[] => {
+  const y = new Date().getFullYear();
+  return [...DEFAULT_HOLIDAYS(y), ...DEFAULT_HOLIDAYS(y + 1)].map(h => ({ ...h, id: `hol-${h.date}` }));
+};
+
 /** useState that persists to localStorage under STORAGE_PREFIX + key. */
 function usePersistentState<T>(key: string, fallback: () => T) {
   const [value, setValue] = useState<T>(() => loadFromStorage(key, fallback));
@@ -313,6 +356,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [announcements, setAnnouncements] = usePersistentState<AcademyAnnouncement[]>('announcements', () => []);
   const [tickets, setTickets] = usePersistentState<SupportTicket[]>('tickets', () => []);
   const [dailyQuizAttempts, setDailyQuizAttempts] = usePersistentState<DailyQuizAttempt[]>('dailyQuizAttempts', () => []);
+  const [leaveRequests, setLeaveRequests] = usePersistentState<LeaveRequest[]>('leaveRequests', () => []);
+  const [holidays, setHolidays] = usePersistentState<Holiday[]>('holidays', () => defaultHolidays());
+  const [onlineClasses, setOnlineClasses] = usePersistentState<OnlineClass[]>('onlineClasses', () => []);
+  const [classReminders, setClassReminders] = usePersistentState<ClassReminder[]>('classReminders', () => []);
+  const [settings, setSettings] = usePersistentState<AcademySettings>('settings', () => ({ youtubeChannelUrl: YOUTUBE_CHANNEL }));
 
   // ---------- identity ----------
   const currentAccount = useMemo(
@@ -422,11 +470,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const staffMembers = useMemo(
     () =>
       staffRaw.map(s => {
-        const entries = staffAttendance.filter(a => a.staffId === s.id);
+        // Approved leave is not counted against attendance.
+        const entries = staffAttendance.filter(a => a.staffId === s.id && a.status !== 'leave');
         const present = entries.filter(a => a.status === 'present').length;
-        return { ...s, attendanceRate: entries.length ? Math.round((present / entries.length) * 1000) / 10 : 100 };
+        const onLeaveToday = leaveRequests.some(l => l.staffId === s.id && l.status === 'approved' && l.from <= today && l.to >= today);
+        return {
+          ...s,
+          status: onLeaveToday ? ('on_leave' as const) : ('active' as const),
+          attendanceRate: entries.length ? Math.round((present / entries.length) * 1000) / 10 : 100
+        };
       }),
-    [staffRaw, staffAttendance]
+    [staffRaw, staffAttendance, leaveRequests, today]
   );
 
   const currentStudent = useMemo(
@@ -849,9 +903,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return result;
   };
 
-  const addStudyMaterial = (matData: Omit<StudyMaterial, 'id' | 'uploadedAt'>) => {
-    setMaterials(prev => [{ ...matData, id: `mat-${Date.now()}`, uploadedAt: today }, ...prev]);
+  const addStudyMaterial = (matData: Omit<StudyMaterial, 'id' | 'uploadedAt'>): StudyMaterial => {
+    const m: StudyMaterial = { ...matData, id: `mat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, uploadedAt: today };
+    setMaterials(prev => [m, ...prev]);
+    return m;
   };
+  const deleteStudyMaterial = (materialId: string) => {
+    const m = materials.find(x => x.id === materialId);
+    if (m?.fileId) deleteFile(m.fileId).catch(() => undefined);
+    setMaterials(prev => prev.filter(x => x.id !== materialId));
+  };
+
+  const updateStudentPhoto = (studentId: string, photo: string | undefined) =>
+    setStudents(prev => prev.map(s => (s.id === studentId ? { ...s, photo } : s)));
 
   // ---------- question bank & tests ----------
   const addQuestionToBank = (qData: Omit<Question, 'id'>): Question => {
@@ -862,6 +926,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateQuestionInBank = (questionId: string, updated: Partial<Question>) =>
     setQuestionBank(prev => prev.map(q => (q.id === questionId ? { ...q, ...updated } : q)));
   const deleteQuestionFromBank = (questionId: string) => setQuestionBank(prev => prev.filter(q => q.id !== questionId));
+  const importQuestions = (qs: Omit<Question, 'id'>[]): number => {
+    const stamp = Date.now().toString(36);
+    const added: Question[] = qs.map((q, i) => ({ ...q, id: `qb-${stamp}-${i}`, createdAt: q.createdAt || today }));
+    setQuestionBank(prev => [...added, ...prev]);
+    return added.length;
+  };
 
   const createTestFromQuestionBank: AppContextType['createTestFromQuestionBank'] = data => {
     const selected = questionBank.filter(q => data.questionIds.includes(q.id));
@@ -1057,6 +1127,143 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  const updateStaffMember: AppContextType['updateStaffMember'] = (staffId, patch) => {
+    setStaffMembers(prev => prev.map(s => (s.id === staffId ? { ...s, ...patch } : s)));
+    if (patch.name || patch.phone || patch.email || patch.designation)
+      setAccounts(prev =>
+        prev.map(a =>
+          a.linkedStaffId === staffId
+            ? { ...a, name: patch.name ?? a.name, phone: patch.phone ?? a.phone, email: patch.email ?? a.email, designation: patch.designation ?? a.designation }
+            : a
+        )
+      );
+  };
+
+  // ---------- leave ----------
+  const applyLeave: AppContextType['applyLeave'] = data => {
+    const staff = staffRaw.find(s => s.id === data.staffId);
+    if (!staff) return { error: 'Staff record not found.' };
+    if (data.to < data.from) return { error: 'The end date is before the start date.' };
+    const days = data.halfDay ? 0.5 : workingDaysIn(data.from, data.to, holidays).length;
+    if (days === 0) return { error: 'Those dates are all Sundays or holidays: no leave needed.' };
+    const clash = leaveRequests.find(
+      l => l.staffId === data.staffId && (l.status === 'pending' || l.status === 'approved') && l.from <= data.to && l.to >= data.from
+    );
+    if (clash) return { error: `Overlaps an existing ${clash.status} leave (${clash.from} to ${clash.to}).` };
+    const req: LeaveRequest = {
+      ...data,
+      to: data.halfDay ? data.from : data.to,
+      id: `lv-${Date.now().toString(36)}`,
+      staffName: staff.name,
+      days,
+      status: 'pending',
+      appliedAt: new Date().toISOString()
+    };
+    setLeaveRequests(prev => [req, ...prev]);
+    return req;
+  };
+  const decideLeave: AppContextType['decideLeave'] = (leaveId, status, note) => {
+    const req = leaveRequests.find(l => l.id === leaveId);
+    if (!req) return;
+    setLeaveRequests(prev =>
+      prev.map(l => (l.id === leaveId ? { ...l, status, decidedBy: currentAccount?.name || 'Management', decidedAt: new Date().toISOString(), decisionNote: note } : l))
+    );
+    // Approved leave shows on the staff attendance register.
+    if (status === 'approved') {
+      const days = workingDaysIn(req.from, req.to, holidays);
+      setStaffAttendance(prev => {
+        const ids = new Set(days.map(d => `sa-${req.staffId}-${d}`));
+        return [...prev.filter(a => !ids.has(a.id)), ...days.map(d => ({ id: `sa-${req.staffId}-${d}`, staffId: req.staffId, date: d, status: 'leave' as const }))];
+      });
+    }
+  };
+  const cancelLeave = (leaveId: string) => {
+    const req = leaveRequests.find(l => l.id === leaveId);
+    setLeaveRequests(prev => prev.map(l => (l.id === leaveId ? { ...l, status: 'cancelled' } : l)));
+    if (req?.status === 'approved')
+      setStaffAttendance(prev => prev.filter(a => !(a.staffId === req.staffId && a.status === 'leave' && a.date >= req.from && a.date <= req.to)));
+  };
+  const addHoliday = (date: string, name: string) =>
+    setHolidays(prev => [...prev.filter(h => h.date !== date), { id: `hol-${date}`, date, name }].sort((a, b) => a.date.localeCompare(b.date)));
+  const removeHoliday = (holidayId: string) => setHolidays(prev => prev.filter(h => h.id !== holidayId));
+
+  // ---------- online classes ----------
+  const classAudienceSize = (cls: OnlineClass) => studentsRaw.filter(s => s.status === 'active' && classIsFor(cls, s.enrolledBatchId)).length;
+  const saveOnlineClass: AppContextType['saveOnlineClass'] = data => {
+    const existing = data.id ? onlineClasses.find(c => c.id === data.id) : undefined;
+    const cls: OnlineClass = existing
+      ? { ...existing, ...data, id: existing.id }
+      : {
+          ...data,
+          id: `ocl-${Date.now().toString(36)}`,
+          cancelledDates: [],
+          recordings: {},
+          createdBy: currentAccount?.name || 'Staff',
+          createdAt: new Date().toISOString()
+        };
+    setOnlineClasses(prev => (existing ? prev.map(c => (c.id === cls.id ? cls : c)) : [cls, ...prev]));
+    return cls;
+  };
+  const deleteOnlineClass = (classId: string) => {
+    setOnlineClasses(prev => prev.filter(c => c.id !== classId));
+    setClassReminders(prev => prev.filter(r => r.classId !== classId));
+  };
+  const setOccurrenceCancelled = (classId: string, date: string, cancelled: boolean) =>
+    setOnlineClasses(prev =>
+      prev.map(c =>
+        c.id === classId
+          ? { ...c, cancelledDates: cancelled ? [...new Set([...c.cancelledDates, date])] : c.cancelledDates.filter(d => d !== date) }
+          : c
+      )
+    );
+  const setRecordingLink = (classId: string, date: string, link: string) =>
+    setOnlineClasses(prev =>
+      prev.map(c => {
+        if (c.id !== classId) return c;
+        const recordings = { ...c.recordings };
+        if (link.trim()) recordings[date] = link.trim();
+        else delete recordings[date];
+        return { ...c, recordings };
+      })
+    );
+  const makeReminder = (cls: OnlineClass, date: string, manual: boolean): ClassReminder => ({
+    id: `rem-${cls.id}-${date}${manual ? `-${Date.now().toString(36)}` : ''}`,
+    classId: cls.id,
+    date,
+    sentAt: new Date().toISOString(),
+    recipients: classAudienceSize(cls),
+    channels: 'App, SMS, WhatsApp',
+    manual
+  });
+  const sendClassReminder = (classId: string, date: string): ClassReminder => {
+    const cls = onlineClasses.find(c => c.id === classId)!;
+    const r = makeReminder(cls, date, true);
+    setClassReminders(prev => [r, ...prev]);
+    return r;
+  };
+  const updateSettings = (patch: Partial<AcademySettings>) => setSettings(prev => ({ ...prev, ...patch }));
+
+  // Automatic reminders: when a class is within its reminder window, its link goes out to its students once.
+  // Everything runs in the browser: the "sending" is recorded locally while the app is open.
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      const due = occurrencesBetween(onlineClasses, today, today).filter(
+        o => !o.cancelled && now.getTime() >= o.start.getTime() - o.cls.remindBeforeMinutes * 60_000 && now < o.end
+      );
+      if (due.length === 0) return;
+      setClassReminders(prev => {
+        const have = new Set(prev.filter(r => !r.manual).map(r => `${r.classId}|${r.date}`));
+        const fresh = due.filter(o => !have.has(occurrenceKey(o))).map(o => makeReminder(o.cls, o.date, false));
+        return fresh.length ? [...fresh, ...prev] : prev;
+      });
+    };
+    tick();
+    const t = window.setInterval(tick, 30_000);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onlineClasses, today]);
+
   // ---------- data reset / sample data ----------
   const applyData = (data: SeedData, withContent: boolean) => {
     clearOwnStorage();
@@ -1081,6 +1288,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAnnouncements(withContent ? INITIAL_ANNOUNCEMENTS : []);
     setTickets(withContent ? INITIAL_TICKETS : []);
     setDailyQuizAttempts(data.dailyQuizAttempts);
+    const extras = withContent ? buildSampleExtras(today, data.staffMembers) : { leaveRequests: [], onlineClasses: [], classReminders: [] };
+    setLeaveRequests(extras.leaveRequests);
+    setOnlineClasses(extras.onlineClasses);
+    setClassReminders(extras.classReminders);
+    setHolidays(defaultHolidays());
+    setSettings({ youtubeChannelUrl: YOUTUBE_CHANNEL });
+    if (withContent) {
+      // Approved sample leave appears on the attendance register.
+      setStaffAttendance(prev => {
+        const marks = extras.leaveRequests
+          .filter(l => l.status === 'approved')
+          .flatMap(l => workingDaysIn(l.from, l.to, defaultHolidays()).map(d => ({ id: `sa-${l.staffId}-${d}`, staffId: l.staffId, date: d, status: 'leave' as const })));
+        const ids = new Set(marks.map(m => m.id));
+        return [...data.staffAttendance.filter(a => !ids.has(a.id)), ...marks];
+      });
+    }
+    clearFiles();
     setTheme(theme);
     // Stay signed in as the same account if it still exists; otherwise fall back to management.
     if (currentAccountId) {
@@ -1114,7 +1338,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return attempt;
   };
 
-  const notificationCount = visibleExamAlerts.filter(a => a.status === 'active').length + visibleAnnouncements.length;
+  const myClassLinksToday =
+    role === 'student'
+      ? classReminders.filter(r => r.date === today && onlineClasses.some(c => c.id === r.classId && classIsFor(c, currentStudent?.enrolledBatchId))).length
+      : 0;
+  const notificationCount = visibleExamAlerts.filter(a => a.status === 'active').length + visibleAnnouncements.length + myClassLinksToday;
 
   return (
     <AppContext.Provider
@@ -1161,6 +1389,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         visibleExamAlerts,
         visibleAnnouncements,
         tickets,
+        leaveRequests,
+        holidays,
+        onlineClasses,
+        classReminders,
+        settings,
+        deleteStudyMaterial,
+        importQuestions,
+        updateStudentPhoto,
+        updateStaffMember,
+        applyLeave,
+        decideLeave,
+        cancelLeave,
+        addHoliday,
+        removeHoliday,
+        saveOnlineClass,
+        deleteOnlineClass,
+        setOccurrenceCancelled,
+        setRecordingLink,
+        sendClassReminder,
+        classAudienceSize,
+        updateSettings,
         addLead,
         updateLeadStatus,
         addFollowUp,

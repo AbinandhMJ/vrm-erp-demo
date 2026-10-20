@@ -224,7 +224,7 @@ export interface StudyMaterial {
   id: string;
   title: string;
   subject: string;
-  type: 'PDF Notes' | 'Handwritten Digest' | 'Mindmap' | 'Question Compendium' | 'Current Affairs';
+  type: 'PDF Notes' | 'Handwritten Digest' | 'Mindmap' | 'Question Compendium' | 'Current Affairs' | 'Slides' | 'Video' | 'Worksheet' | 'Other';
   fileSize: string;
   uploadedAt: string;
   uploadedBy: string;
@@ -232,9 +232,15 @@ export interface StudyMaterial {
   targetBatchId?: string;
   targetBatchName?: string;
   targetStudentId?: string;
+  /** For materials shared with several batches at once. */
+  targetBatchIds?: string[];
   downloadUrl?: string;
   pageCount: number;
   summary: string;
+  /** Uploaded file kept in the browser's IndexedDB (key), with its original name and type. */
+  fileId?: string;
+  fileName?: string;
+  mimeType?: string;
 }
 
 export interface Question {
@@ -305,6 +311,10 @@ export interface StaffMember {
   joiningDate: string;
   status: 'active' | 'on_leave';
   attendanceRate: number;
+  /** Passport photo as a small JPEG data URL. */
+  photo?: string;
+  qualification?: string;
+  address?: string;
 }
 
 export interface SalaryPayout {
@@ -419,4 +429,74 @@ export interface AdmissionFormValues {
   aim: string;
   reference: string;
   photo: string;
+}
+
+export type LeaveType = 'casual' | 'sick' | 'earned' | 'unpaid';
+
+export interface LeaveRequest {
+  id: string;
+  staffId: string;
+  staffName: string;
+  type: LeaveType;
+  from: string; // YYYY-MM-DD
+  to: string; // YYYY-MM-DD
+  days: number; // working days (Mon–Sat, excluding holidays)
+  halfDay?: boolean;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  appliedAt: string; // ISO
+  decidedBy?: string;
+  decidedAt?: string;
+  decisionNote?: string;
+}
+
+export interface Holiday {
+  id: string;
+  date: string; // YYYY-MM-DD
+  name: string;
+}
+
+export type OnlinePlatform = 'YouTube Live' | 'Google Meet' | 'Zoom' | 'Other';
+
+/** An online class, one-off or repeating. Occurrences are computed from the schedule. */
+export interface OnlineClass {
+  id: string;
+  title: string;
+  subject: string;
+  /** Empty = open to all students. */
+  batchIds: string[];
+  facultyName: string;
+  platform: OnlinePlatform;
+  link: string;
+  startDate: string; // first occurrence, YYYY-MM-DD
+  startTime: string; // HH:MM (24h)
+  durationMinutes: number;
+  repeat: 'none' | 'daily' | 'weekly';
+  /** For weekly: days of week (0 = Sunday … 6 = Saturday). */
+  repeatDays: number[];
+  /** Last date for repeating classes. */
+  endDate?: string;
+  /** Minutes before start that students get the link (in-app, SMS/WhatsApp simulated). */
+  remindBeforeMinutes: number;
+  cancelledDates: string[];
+  /** Recording links per occurrence date (e.g. the YouTube video after the live class). */
+  recordings: Record<string, string>;
+  notes?: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+/** A reminder (with the class link) delivered to students for one class occurrence. */
+export interface ClassReminder {
+  id: string;
+  classId: string;
+  date: string; // occurrence date
+  sentAt: string; // ISO
+  recipients: number;
+  channels: string; // e.g. "App, SMS, WhatsApp"
+  manual: boolean;
+}
+
+export interface AcademySettings {
+  youtubeChannelUrl: string;
 }

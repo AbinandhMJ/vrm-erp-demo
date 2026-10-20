@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Modal } from '../common/Modal';
+import { QuestionImportModal } from './QuestionImportModal';
 import { AssessmentTest, Question, StudentTestAttempt } from '../../types';
 import { formatDate } from '../../lib/dates';
 import {
@@ -32,7 +33,8 @@ import {
   SlidersHorizontal,
   Edit3,
   Copy,
-  X
+  X,
+  FileUp
 } from 'lucide-react';
 
 export const TestAssessment: React.FC = () => {
@@ -73,6 +75,8 @@ export const TestAssessment: React.FC = () => {
 
   // Add & Edit Question Modal States
   const [isAddQuestionModalOpen, setIsAddQuestionModalOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importNotice, setImportNotice] = useState('');
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [isEditQuestionModalOpen, setIsEditQuestionModalOpen] = useState(false);
 
@@ -490,6 +494,13 @@ export const TestAssessment: React.FC = () => {
     setCompletedAttempt(attempt);
   };
 
+  const confirmSubmit = () => {
+    if (!activeTest) return;
+    const unanswered = activeTest.questions.length - Object.keys(selectedAnswers).length;
+    const msg = unanswered > 0 ? `You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}. Submit anyway?` : 'Submit your answers now?';
+    if (window.confirm(msg)) handleSubmitTest();
+  };
+
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
@@ -526,6 +537,15 @@ export const TestAssessment: React.FC = () => {
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                 <span>Seed Question Pack</span>
+              </button>
+
+              <button
+                onClick={() => setIsImportOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg transition-colors shadow-2xs"
+                title="Excel / CSV, Word, PDF, photo of a page or pasted text"
+              >
+                <FileUp className="w-3.5 h-3.5 text-amber-600" />
+                <span>Bulk import (Excel / Word / PDF / Photo)</span>
               </button>
 
               <button
@@ -1123,6 +1143,22 @@ export const TestAssessment: React.FC = () => {
       {/* ============================================================== */}
       {/* MODAL 1: ADD QUESTION TO BANK (WITH MARKS & PENALTY ENGINE)     */}
       {/* ============================================================== */}
+      {isImportOpen && (
+        <QuestionImportModal
+          onClose={() => setIsImportOpen(false)}
+          onImported={n => {
+            setIsImportOpen(false);
+            setImportNotice(`${n} question${n === 1 ? '' : 's'} added to the bank.`);
+            window.setTimeout(() => setImportNotice(''), 5000);
+          }}
+        />
+      )}
+      {importNotice && (
+        <div role="status" className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[70] px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold shadow-lg">
+          {importNotice}
+        </div>
+      )}
+
       {isAddQuestionModalOpen && (
         <Modal title="Add New Item to Institutional Question Bank" onClose={() => setIsAddQuestionModalOpen(false)} size="lg" bodyClassName="px-5 py-4 space-y-5">
 
@@ -1664,9 +1700,7 @@ export const TestAssessment: React.FC = () => {
                 <span>{formatTime(secondsLeft)}</span>
               </div>
               <button
-                onClick={() => {
-                  if (window.confirm('Submit test attempt now for automated grading?')) handleSubmitTest();
-                }}
+                onClick={confirmSubmit}
                 className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors shadow-xs"
               >
                 Submit
@@ -1713,6 +1747,9 @@ export const TestAssessment: React.FC = () => {
                       return (
                         <button
                           key={optIdx}
+                          type="button"
+                          role="radio"
+                          aria-checked={isSelected}
                           onClick={() => handleOptionSelect(currentQ.id, optIdx)}
                           className={`w-full text-left p-3.5 rounded-xl border text-xs flex items-start gap-3 transition-colors ${
                             isSelected
@@ -1766,19 +1803,36 @@ export const TestAssessment: React.FC = () => {
                         <span>Previous</span>
                       </button>
 
-                      <button
-                        onClick={() =>
-                          setCurrentQuestionIndex(prev =>
-                            Math.min(activeTest.questions.length - 1, prev + 1)
-                          )
-                        }
-                        disabled={currentQuestionIndex === activeTest.questions.length - 1}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 dark:bg-amber-600 rounded-lg disabled:opacity-30"
-                      >
-                        <span>Save & Next</span>
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
+                      {currentQuestionIndex < activeTest.questions.length - 1 ? (
+                        <button
+                          onClick={() => setCurrentQuestionIndex(prev => Math.min(activeTest.questions.length - 1, prev + 1))}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 dark:bg-amber-600 rounded-lg"
+                        >
+                          <span>Save & Next</span>
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={confirmSubmit}
+                          className="inline-flex items-center gap-1 px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg"
+                        >
+                          Submit Test
+                        </button>
+                      )}
                     </div>
+                  </div>
+
+                  {/* Always-visible submit at the bottom of the question area */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                    <span className="text-xs text-slate-600 dark:text-slate-300">
+                      Answered <b>{Object.keys(selectedAnswers).length}</b> of {activeTest.questions.length} questions
+                    </span>
+                    <button
+                      onClick={confirmSubmit}
+                      className="px-5 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-xs"
+                    >
+                      Submit Test
+                    </button>
                   </div>
                 </div>
               );
@@ -1837,14 +1891,10 @@ export const TestAssessment: React.FC = () => {
 
             <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
               <button
-                onClick={() => {
-                  if (window.confirm('Ready to submit your mock test answers?')) {
-                    handleSubmitTest();
-                  }
-                }}
-                className="w-full py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-amber-600 dark:hover:bg-amber-500 rounded-lg shadow-xs"
+                onClick={confirmSubmit}
+                className="w-full py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-xs"
               >
-                Finish & View Scorecard
+                Submit Test
               </button>
             </div>
           </div>
@@ -1856,6 +1906,22 @@ export const TestAssessment: React.FC = () => {
       {/* Post-Test Automated Scorecard Modal */}
       {completedAttempt && (
         <Modal title={<>{completedAttempt.testTitle}</>} onClose={() => setCompletedAttempt(null)} size="lg" bodyClassName="px-5 py-4 space-y-5">
+
+        <div className="p-4 rounded-xl bg-slate-900 text-white flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <span className="text-xs text-slate-400 block">Marks obtained</span>
+            <span className="text-3xl font-mono font-bold">
+              {completedAttempt.score} <span className="text-lg text-slate-400">/ {completedAttempt.totalMarks}</span>
+            </span>
+          </div>
+          <div className="text-xs text-slate-300 text-right">
+            <div>
+              <b className="text-emerald-400">{completedAttempt.correctAnswers}</b> correct · <b className="text-rose-400">{completedAttempt.incorrectAnswers}</b> incorrect ·{' '}
+              <b>{completedAttempt.unattempted}</b> not answered
+            </div>
+            <div className="mt-0.5">{completedAttempt.rankInBatch ? 'Saved to your record' : 'Preview only (not saved)'}</div>
+          </div>
+        </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs">
           <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
@@ -1884,8 +1950,42 @@ export const TestAssessment: React.FC = () => {
           </div>
         </div>
 
+        {/* Answer review */}
+        {(() => {
+          const t = assessmentTests.find(x => x.id === completedAttempt.testId);
+          if (!t) return null;
+          return (
+            <div className="space-y-2">
+              <span className="text-xs font-bold text-slate-900 dark:text-white block">Answer review</span>
+              {t.questions.map((q, qi) => {
+                const chosen = completedAttempt.userAnswers[q.id];
+                const right = chosen === q.correctOptionIndex;
+                return (
+                  <div key={q.id} className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-xs space-y-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-slate-800 dark:text-slate-200 line-clamp-2">
+                        <b>Q{qi + 1}.</b> {q.questionText.split('\n')[0]}
+                      </p>
+                      <span
+                        className={`shrink-0 font-semibold ${chosen === undefined ? 'text-slate-400' : right ? 'text-emerald-600' : 'text-rose-600'}`}
+                      >
+                        {chosen === undefined ? 'Not answered' : right ? 'Correct' : 'Incorrect'}
+                      </span>
+                    </div>
+                    <p className="text-slate-500 dark:text-slate-400">
+                      Your answer: {chosen === undefined ? '—' : `${String.fromCharCode(65 + chosen)}. ${q.options[chosen]}`} · Correct:{' '}
+                      {String.fromCharCode(65 + q.correctOptionIndex)}. {q.options[q.correctOptionIndex]}
+                    </p>
+                    {q.explanation && !right && <p className="text-slate-600 dark:text-slate-400">{q.explanation}</p>}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+
         <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-2 text-xs">
-          <span className="font-bold text-slate-900 dark:text-white block">Mentor Analysis & Recommended Actions:</span>
+          <span className="font-bold text-slate-900 dark:text-white block">Areas to improve</span>
           <ul className="list-disc pl-4 space-y-1 text-slate-600 dark:text-slate-400">
             {completedAttempt.improvementAreas?.map((item, idx) => (
               <li key={idx}>{item}</li>

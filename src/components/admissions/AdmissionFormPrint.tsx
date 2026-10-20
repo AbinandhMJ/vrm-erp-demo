@@ -37,7 +37,7 @@ export interface PrintableAdmissionForm {
   officeUse: [string, string][];
 }
 
-export const printableFromStudent = (s: Student): PrintableAdmissionForm => ({
+export const printableFromStudent = (s: Student, includeFees = true): PrintableAdmissionForm => ({
   heading: `${s.name} · ${s.rollNumber}`,
   date: s.admissionDate,
   courseName: s.enrolledCourseName,
@@ -61,7 +61,7 @@ export const printableFromStudent = (s: Student): PrintableAdmissionForm => ({
   officeUse: [
     ['Roll No', s.rollNumber],
     ['Batch', s.enrolledBatchName],
-    ['Fee', `₹${s.netFee.toLocaleString('en-IN')} (${PLAN_LABEL[s.paymentPlan]})`],
+    ...(includeFees ? ([['Fee', `₹${s.netFee.toLocaleString('en-IN')} (${PLAN_LABEL[s.paymentPlan]})`]] as [string, string][]) : []),
     ['Declaration accepted', s.declarationAcceptedAt ? formatDate(s.declarationAcceptedAt.slice(0, 10)) : '—']
   ]
 });

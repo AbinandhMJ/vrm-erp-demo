@@ -9,6 +9,8 @@ export const TAB_ACCESS: Record<string, UserRole[]> = {
   timetable: ['management', 'office_staff', 'faculty', 'student'],
   materials: ['management', 'office_staff', 'faculty', 'student'],
   tests: ['management', 'office_staff', 'faculty', 'student'],
+  online_classes: ['management', 'office_staff', 'faculty', 'student'],
+  leave: ['management', 'office_staff', 'faculty', 'field_agent'],
   fees: ['management', 'office_staff'],
   reports: ['management', 'office_staff'],
   communication: ['management', 'office_staff', 'faculty', 'student', 'field_agent'],

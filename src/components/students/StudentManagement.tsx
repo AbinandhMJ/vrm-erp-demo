@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Modal } from '../common/Modal';
 import { AdmissionFormPrint, printableFromStudent } from '../admissions/AdmissionFormPrint';
+import { EditStudentModal } from '../admissions/EditStudentModal';
 import { Student } from '../../types';
+import { formatDate } from '../../lib/dates';
 import {
   GraduationCap,
   Search,
@@ -13,7 +15,10 @@ import {
   CreditCard,
   FileText,
   Calendar,
-  X
+  X,
+  Eye,
+  Pencil,
+  Printer
 } from 'lucide-react';
 
 export const StudentManagement: React.FC = () => {
@@ -35,6 +40,7 @@ export const StudentManagement: React.FC = () => {
   // Fee and payment details are for office and management only (not faculty).
   const canSeeFees = role === 'management' || role === 'office_staff';
   const [formStudent, setFormStudent] = useState<Student | null>(null);
+  const [editStudent, setEditStudent] = useState<Student | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
   const filteredStudents = students.filter(student => {
@@ -146,9 +152,16 @@ export const StudentManagement: React.FC = () => {
                   return (
                     <tr key={student.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="px-4 py-3.5">
-                        <div className="font-semibold text-slate-900 dark:text-white text-sm">{student.name}</div>
-                        <div className="font-mono text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">
-                          {student.rollNumber} · Enrolled {student.admissionDate}
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-10 rounded overflow-hidden bg-slate-100 dark:bg-slate-800 shrink-0 flex items-center justify-center text-slate-400 font-bold">
+                            {student.photo ? <img src={student.photo} alt="" className="w-full h-full object-cover" /> : student.name.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="font-semibold text-slate-900 dark:text-white text-sm whitespace-nowrap">{student.name}</div>
+                            <div className="font-mono text-slate-500 dark:text-slate-400 text-[11px] mt-0.5 whitespace-nowrap">
+                              {student.rollNumber} · Enrolled {formatDate(student.admissionDate)}
+                            </div>
+                          </div>
                         </div>
                       </td>
 
@@ -201,9 +214,23 @@ export const StudentManagement: React.FC = () => {
                       <td className="px-4 py-3.5 text-right space-x-1">
                         <button
                           onClick={() => setSelectedStudent(student)}
-                          className="px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md transition-colors"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md transition-colors"
                         >
-                          Profile 360°
+                          <Eye className="w-3 h-3" /> View
+                        </button>
+                        {canSeeFees && (
+                          <button
+                            onClick={() => setEditStudent(student)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-md transition-colors"
+                          >
+                            <Pencil className="w-3 h-3" /> Edit
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setFormStudent(student)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-md transition-colors"
+                        >
+                          <Printer className="w-3 h-3" /> Print
                         </button>
                       </td>
                     </tr>
@@ -217,7 +244,13 @@ export const StudentManagement: React.FC = () => {
 
       {/* Student 360 Profile Modal */}
       {selectedStudent && (
-        <Modal title={<>{selectedStudent.name}</>} subtitle={<>Roll ID: {selectedStudent.rollNumber} · Batch: {selectedStudent.enrolledBatchName}</>} onClose={() => setSelectedStudent(null)} size="lg" bodyClassName="px-5 py-4 space-y-5">
+        <Modal
+          icon={
+            selectedStudent.photo ? (
+              <img src={selectedStudent.photo} alt="" className="w-12 h-15 rounded-md object-cover" />
+            ) : undefined
+          }
+          title={<>{selectedStudent.name}</>} subtitle={<>Roll ID: {selectedStudent.rollNumber} · Batch: {selectedStudent.enrolledBatchName}</>} onClose={() => setSelectedStudent(null)} size="lg" bodyClassName="px-5 py-4 space-y-5">
 
         {/* Overview Stats */}
         <div className={`grid ${canSeeFees ? 'grid-cols-3' : 'grid-cols-2'} gap-3 text-center text-xs`}>
@@ -324,12 +357,21 @@ export const StudentManagement: React.FC = () => {
         <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
           {canSeeFees && (
             <button
-              onClick={() => setFormStudent(selectedStudent)}
-              className="px-4 py-1.5 text-xs font-semibold text-slate-900 bg-amber-400 hover:bg-amber-300 rounded-lg"
+              onClick={() => {
+                setEditStudent(selectedStudent);
+                setSelectedStudent(null);
+              }}
+              className="px-4 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800"
             >
-              Admission Form
+              Edit
             </button>
           )}
+          <button
+            onClick={() => setFormStudent(selectedStudent)}
+            className="px-4 py-1.5 text-xs font-semibold text-slate-900 bg-amber-400 hover:bg-amber-300 rounded-lg"
+          >
+            Print
+          </button>
           <button
             onClick={() => setSelectedStudent(null)}
             className="px-4 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg"
@@ -340,7 +382,8 @@ export const StudentManagement: React.FC = () => {
         </Modal>
       )}
 
-      {formStudent && <AdmissionFormPrint form={printableFromStudent(formStudent)} onClose={() => setFormStudent(null)} />}
+      {formStudent && <AdmissionFormPrint form={printableFromStudent(formStudent, canSeeFees)} onClose={() => setFormStudent(null)} />}
+      {editStudent && <EditStudentModal student={editStudent} onClose={() => setEditStudent(null)} />}
     </div>
   );
 };

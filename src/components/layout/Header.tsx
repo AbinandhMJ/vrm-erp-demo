@@ -38,8 +38,23 @@ export const Header: React.FC = () => {
     visibleAnnouncements: announcements,
     resetToDefaultData,
     loadSampleData,
-    hasActivityData
+    hasActivityData,
+    onlineClasses,
+    classReminders,
+    currentStudent,
+    currentStaff,
+    today,
+    setActiveTab
   } = useApp();
+  // Class links sent today for this student's batch (most recent first).
+  const classLinks =
+    role === 'student'
+      ? classReminders
+          .filter(r => r.date === today)
+          .map(r => ({ r, c: onlineClasses.find(c => c.id === r.classId) }))
+          .filter(x => x.c && (x.c.batchIds.length === 0 || x.c.batchIds.includes(currentStudent?.enrolledBatchId || '')))
+          .filter((x, i, all) => all.findIndex(y => y.c!.id === x.c!.id) === i)
+      : [];
 
   const [isDataMenuOpen, setIsDataMenuOpen] = useState(false);
   const canManageData = role === 'management' || role === 'office_staff';
@@ -170,6 +185,33 @@ export const Header: React.FC = () => {
                 </div>
                 
                 <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 mt-2">
+                  {classLinks.length > 0 && (
+                    <div className="py-2">
+                      <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase tracking-wider block mb-1">Today's online classes</span>
+                      {classLinks.map(({ r, c }) => (
+                        <div key={r.id} className="p-2 rounded-lg bg-rose-50/70 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/40 mb-1.5 text-xs">
+                          <div className="font-semibold text-slate-900 dark:text-slate-100">{c!.title}</div>
+                          <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                            {c!.startTime} · {c!.platform} · {c!.facultyName}
+                          </div>
+                          <div className="flex gap-3 mt-1">
+                            <a href={c!.link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 dark:text-rose-400 hover:underline">
+                              Join link <ExternalLink className="w-3 h-3" />
+                            </a>
+                            <button
+                              onClick={() => {
+                                setIsNotifOpen(false);
+                                setActiveTab('online_classes');
+                              }}
+                              className="text-[11px] text-slate-500 hover:underline"
+                            >
+                              All classes
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="py-2">
                     <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider block mb-1">
                       Govt Exam Alerts
@@ -262,9 +304,13 @@ export const Header: React.FC = () => {
               onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
               className="flex items-center gap-2 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
-              <div className="w-8 h-8 rounded-full bg-slate-900 dark:bg-amber-500 text-amber-300 dark:text-slate-950 font-bold text-xs flex items-center justify-center">
-                {currentUser.name.charAt(0)}
-              </div>
+              {(currentStudent?.photo || currentStaff?.photo) ? (
+                <img src={currentStudent?.photo || currentStaff?.photo} alt="" className="w-8 h-8 rounded-full object-cover" />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-slate-900 dark:bg-amber-500 text-amber-300 dark:text-slate-950 font-bold text-xs flex items-center justify-center">
+                  {currentUser.name.charAt(0)}
+                </div>
+              )}
               <div className="hidden sm:block text-left leading-tight">
                 <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 block truncate max-w-[120px]">
                   {currentUser.name}

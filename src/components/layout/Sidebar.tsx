@@ -21,7 +21,9 @@ import {
   PanelLeftOpen,
   ChevronLeft,
   ChevronRight,
-  FileSignature
+  FileSignature,
+  Video,
+  CalendarCheck
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -36,8 +38,10 @@ export const Sidebar: React.FC = () => {
     leads,
     invoices,
     tickets,
-    visibleExamAlerts: examAlerts
+    visibleExamAlerts: examAlerts,
+    leaveRequests
   } = useApp();
+  const pendingLeave = role === 'management' || role === 'office_staff' ? leaveRequests.filter(l => l.status === 'pending').length : 0;
 
   const newLeadsCount = leads.filter(l => l.status === 'new').length;
   const pendingApplications = leads.filter(l => l.application && l.status !== 'converted' && l.status !== 'dropped').length;
@@ -84,6 +88,11 @@ export const Sidebar: React.FC = () => {
       icon: <ClipboardCheck className="w-4 h-4 shrink-0" />
     },
     {
+      id: 'online_classes',
+      label: 'Online Classes',
+      icon: <Video className="w-4 h-4 shrink-0" />
+    },
+    {
       id: 'fees',
       label: 'Fee Management',
       icon: <CreditCard className="w-4 h-4 shrink-0" />,
@@ -104,6 +113,12 @@ export const Sidebar: React.FC = () => {
       id: 'admin',
       label: 'Staff Administration',
       icon: <Building2 className="w-4 h-4 shrink-0" />
+    },
+    {
+      id: 'leave',
+      label: 'Leave & Holidays',
+      icon: <CalendarCheck className="w-4 h-4 shrink-0" />,
+      badge: pendingLeave > 0 ? pendingLeave : undefined
     },
     {
       id: 'analytics',

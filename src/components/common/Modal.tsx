@@ -47,16 +47,30 @@ export const Modal: React.FC<ModalProps> = ({
   dismissible = true,
   className = ''
 }) => {
-  const closeRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Keep the latest handlers in refs so the effects below run once per open, not on every render.
+  // (Re-running them on each keystroke used to steal focus from the field being typed in.)
+  const onCloseRef = useRef(onClose);
+  const dismissibleRef = useRef(dismissible);
+  onCloseRef.current = onClose;
+  dismissibleRef.current = dismissible;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && dismissible) onClose();
+      if (e.key === 'Escape' && dismissibleRef.current) onCloseRef.current();
     };
     document.addEventListener('keydown', onKey);
-    closeRef.current?.focus({ preventScroll: true });
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose, dismissible]);
+  }, []);
+
+  // On open only: move focus into the dialog (first field if there is one), and restore it on close.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    const firstField = panel?.querySelector<HTMLElement>('.modal-body input:not([type=hidden]):not([type=file]):not([disabled]), .modal-body select, .modal-body textarea');
+    (firstField || panel)?.focus({ preventScroll: true });
+    return () => previouslyFocused?.focus?.({ preventScroll: true });
+  }, []);
 
   const dark = headerTone === 'dark';
 
@@ -68,9 +82,11 @@ export const Modal: React.FC<ModalProps> = ({
       }}
     >
       <div
+        ref={panelRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        className={`modal-panel w-full ${SIZES[size]} max-h-[92dvh] sm:max-h-[90dvh] flex flex-col bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden ${className}`}
+        className={`modal-panel w-full ${SIZES[size]} max-h-[92dvh] sm:max-h-[90dvh] flex flex-col bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden outline-none ${className}`}
       >
         <div
           className={`modal-header shrink-0 flex items-start justify-between gap-3 px-5 py-3.5 border-b ${
@@ -87,7 +103,6 @@ export const Modal: React.FC<ModalProps> = ({
           <div className="flex items-center gap-2 shrink-0">
             {headerActions}
             <button
-              ref={closeRef}
               type="button"
               onClick={onClose}
               aria-label="Close"

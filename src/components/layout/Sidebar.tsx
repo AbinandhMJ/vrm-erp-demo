@@ -20,7 +20,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  FileSignature
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -39,6 +40,7 @@ export const Sidebar: React.FC = () => {
   } = useApp();
 
   const newLeadsCount = leads.filter(l => l.status === 'new').length;
+  const pendingApplications = leads.filter(l => l.application && l.status !== 'converted' && l.status !== 'dropped').length;
   const pendingInvoicesCount = invoices.filter(i => i.status === 'overdue').length;
   const openTicketsCount = tickets.filter(t => t.status === 'open').length;
   const activeAlertsCount = examAlerts.filter(a => a.status === 'active').length;
@@ -49,6 +51,12 @@ export const Sidebar: React.FC = () => {
       label: 'Admissions & CRM',
       icon: <Users className="w-4 h-4 shrink-0" />,
       badge: newLeadsCount > 0 ? newLeadsCount : undefined
+    },
+    {
+      id: 'forms',
+      label: 'Admission Forms',
+      icon: <FileSignature className="w-4 h-4 shrink-0" />,
+      badge: pendingApplications > 0 ? pendingApplications : undefined
     },
     {
       id: 'students',
@@ -270,9 +278,9 @@ export const Sidebar: React.FC = () => {
             <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <img
-                  src="/vrm-emblem.jpg"
+                  src="/vrm-logo.jpg"
                   alt="VRM IAS Academy Crest"
-                  className="w-8 h-8 rounded-full object-cover border border-amber-300 dark:border-amber-500/40"
+                  className="w-8 h-8 rounded-lg object-contain bg-white p-0.5 border border-amber-300 dark:border-amber-500/40"
                 />
                 <span className="text-sm font-bold text-slate-900 dark:text-white">
                   VRM IAS ERP

@@ -1,6 +1,7 @@
 import { printLight } from '../../lib/print';
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { ACADEMY } from '../../config/academy';
 import { BarsChart, LinesChart, lakhs, pct } from '../charts/Charts';
 import { bands, weeklyAttendance } from '../../lib/metrics';
 import {
@@ -156,14 +157,14 @@ export const ReportingView: React.FC = () => {
         <div className="flex items-start justify-between border-b border-slate-200 pb-6">
           <div className="flex items-center gap-4">
             <img
-              src="/vrm-emblem.jpg"
+              src="/vrm-logo.jpg"
               alt="VRM IAS Academy Crest"
-              className="w-14 h-14 rounded-full object-cover border border-amber-200 shadow-2xs"
+              className="w-14 h-14 rounded-lg object-contain bg-white p-0.5 border border-amber-200 shadow-2xs"
             />
             <div>
               <h1 className="text-xl font-bold tracking-tight text-slate-900">VRM IAS ACADEMY</h1>
               <p className="text-xs text-slate-500 font-medium">Directorate of Academic Standards & Mentorship Evaluations</p>
-              <p className="text-xs text-slate-400">Anna Nagar Campus, Chennai · Official Academic Report</p>
+              <p className="text-xs text-slate-400">{ACADEMY.addressLine}</p>
             </div>
           </div>
 

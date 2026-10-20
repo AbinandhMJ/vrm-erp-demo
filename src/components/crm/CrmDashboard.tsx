@@ -21,6 +21,7 @@ import {
   X
 } from 'lucide-react';
 import { AdmissionModal } from '../admissions/AdmissionModal';
+import { AdmissionFormPrint, printableFromApplication } from '../admissions/AdmissionFormPrint';
 import { BarsChart, ChartCard } from '../charts/Charts';
 import { addDays, parseISODate } from '../../lib/dates';
 
@@ -32,6 +33,7 @@ export const CrmDashboard: React.FC = () => {
     updateLeadStatus,
     addFollowUp,
     courses,
+    batches,
     role,
     currentAccount,
     today
@@ -52,6 +54,7 @@ export const CrmDashboard: React.FC = () => {
   const [selectedLeadForAdmission, setSelectedLeadForAdmission] = useState<Lead | null>(null);
   const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
   const [isMobileFieldMode, setIsMobileFieldMode] = useState(false);
+  const [viewForm, setViewForm] = useState<Lead | null>(null);
 
   // Form states for New Lead
   const [newLeadName, setNewLeadName] = useState('');
@@ -460,7 +463,18 @@ export const CrmDashboard: React.FC = () => {
                   return (
                     <tr key={lead.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="px-4 py-3.5">
-                        <div className="font-semibold text-slate-900 dark:text-white text-sm">{lead.studentName}</div>
+                        <div className="font-semibold text-slate-900 dark:text-white text-sm flex flex-wrap items-center gap-1.5">
+                          {lead.studentName}
+                          {lead.application && (
+                            <button
+                              onClick={() => setViewForm(lead)}
+                              title="Submitted the online admission form"
+                              className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 hover:underline"
+                            >
+                              Online form {lead.application.applicationNumber}
+                            </button>
+                          )}
+                        </div>
                         <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                           Target Year: <span className="font-mono text-slate-700 dark:text-slate-300">{lead.targetExamYear}</span> · {lead.targetCourse}
                         </div>
@@ -787,6 +801,9 @@ export const CrmDashboard: React.FC = () => {
         />
       )}
 
+      {viewForm && printableFromApplication(viewForm, courses, batches) && (
+        <AdmissionFormPrint form={printableFromApplication(viewForm, courses, batches)!} onClose={() => setViewForm(null)} />
+      )}
     </div>
   );
 };

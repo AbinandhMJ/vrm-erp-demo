@@ -56,11 +56,11 @@ export const LoginView: React.FC = () => {
           aria-hidden
           className="pointer-events-none absolute -right-24 -bottom-24 w-[28rem] h-[28rem] rounded-full border-[40px] border-[#e09f3e]/10"
         />
-        <div className="hidden lg:flex items-center gap-3 relative">
-          <img src="/vrm-emblem.jpg" alt="" className="w-12 h-12 rounded-full object-cover ring-2 ring-[#e09f3e]/60" />
-          <div>
-            <p className="text-lg font-bold tracking-tight">VRM IAS Academy</p>
-            <p className="text-sm text-slate-300">Civil services coaching</p>
+        <div className="hidden lg:flex items-center gap-4 relative">
+          <img src="/vrm-logo.jpg" alt="" className="w-20 h-20 rounded-2xl object-contain bg-white p-1" />
+          <div className="space-y-2">
+            <img src="/vrm-wordmark.jpg" alt="VRM IAS Academy" className="h-9 w-auto rounded-sm" />
+            <p className="text-sm text-slate-300">Perambalur · UPSC, TNPSC, Bank, SSC, Police, TRB and more</p>
           </div>
         </div>
 
@@ -88,7 +88,7 @@ export const LoginView: React.FC = () => {
       <section className="order-1 lg:order-2 flex flex-col px-6 py-8 sm:px-12 lg:px-16">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 lg:invisible">
-            <img src="/vrm-emblem.jpg" alt="VRM IAS Academy" className="w-10 h-10 rounded-full object-cover ring-2 ring-[#e09f3e]/60" />
+            <img src="/vrm-logo.jpg" alt="VRM IAS Academy" className="w-10 h-10 rounded-lg object-contain bg-white p-0.5 ring-2 ring-[#e09f3e]/60" />
             <span className="font-bold tracking-tight">VRM IAS Academy</span>
           </div>
           <button
@@ -118,7 +118,7 @@ export const LoginView: React.FC = () => {
                   setUsername(e.target.value);
                   setError('');
                 }}
-                placeholder="VRM-2026-001 or name@vrmiasacademy.in"
+                placeholder="VRM-2026-001 or name@vrmiasacademy.com"
                 className="w-full h-11 px-3.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#e09f3e] focus:border-[#e09f3e]"
               />
             </div>
@@ -168,6 +168,14 @@ export const LoginView: React.FC = () => {
               phone number.
             </p>
           </form>
+
+          <a
+            href="#/apply"
+            className="mt-6 block rounded-lg border border-[#e09f3e]/60 bg-[#e09f3e]/10 px-4 py-3 text-sm hover:bg-[#e09f3e]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#e09f3e]"
+          >
+            <span className="font-semibold">New student? Apply for admission online</span>
+            <span className="block text-xs text-slate-600 dark:text-slate-400">Fill the admission form; our team will call you back.</span>
+          </a>
 
           <div className="mt-10 pt-6 border-t border-slate-200 dark:border-slate-800">
             <p className="text-sm font-semibold">Try a demo account</p>

@@ -1,8 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Modal } from '../common/Modal';
-import { Lead, ScholarshipType, PaymentPlanType, PaymentReceipt } from '../../types';
+import { Lead, ScholarshipType, PaymentPlanType, PaymentReceipt, Student } from '../../types';
+import { AdmissionFormPrint, printableFromStudent } from './AdmissionFormPrint';
 import { computeDiscount } from '../../lib/fees';
+import {
+  AdmissionFormFields,
+  AdmissionFormValues,
+  DeclarationChecklist,
+  blankForm,
+  firstOpenBatch,
+  formFromLead,
+  useDeclarations,
+  validateAdmissionForm
+} from './AdmissionFormFields';
+import { formatDate } from '../../lib/dates';
 import {
   X,
   UserCheck,
@@ -11,7 +23,8 @@ import {
   Lock,
   Layers,
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  Camera
 } from 'lucide-react';
 
 interface AdmissionModalProps {
@@ -29,29 +42,20 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   
-  // Student Info
-  const [studentName, setStudentName] = useState(initialLead?.studentName || '');
-  const [phone, setPhone] = useState(initialLead?.phone || '');
-  const [email, setEmail] = useState(initialLead?.email || '');
-  const [gender, setGender] = useState('Male');
-  const [address, setAddress] = useState(initialLead?.location || '');
-  const [guardianName, setGuardianName] = useState('');
+  // The academy's admission form (shared with the online application page)
+  const [form, setForm] = useState<AdmissionFormValues>(() =>
+    initialLead ? formFromLead(initialLead, courses, batches) : blankForm(courses[0]?.id || '', firstOpenBatch(batches, courses[0]?.id || '')?.id || '')
+  );
+  const patchForm = (patch: Partial<AdmissionFormValues>) => {
+    setForm(f => ({ ...f, ...patch }));
+    setFormError('');
+  };
+  const decl = useDeclarations();
   const [formError, setFormError] = useState('');
-  const [guardianPhone, setGuardianPhone] = useState(initialLead?.phone || '');
-
-  // Course & Batch
-  const defaultCourse = courses.find(c => c.name === initialLead?.targetCourse) || courses[0];
-  const [selectedCourseId, setSelectedCourseId] = useState(defaultCourse?.id || courses[0]?.id || '');
-  
-  const courseBatches = batches.filter(b => b.courseId === selectedCourseId);
-  const firstOpen = (list: typeof batches) => list.find(b => b.enrolledCount < b.maxCapacity) || list[0];
-  const [selectedBatchId, setSelectedBatchId] = useState(firstOpen(courseBatches)?.id || '');
-
-  useEffect(() => {
-    // Only reset the batch when the course changes (not when seat counts update after admission).
-    setSelectedBatchId(firstOpen(batches.filter(b => b.courseId === selectedCourseId))?.id || '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCourseId]);
+  const { studentName, phone, email, address, guardianName, guardianPhone } = form;
+  const selectedCourseId = form.courseId;
+  const selectedBatchId = form.batchId;
+  const selectedBatchObj = batches.find(b => b.id === selectedBatchId);
 
   // Fee & Scholarship
   const currentCourse = courses.find(c => c.id === selectedCourseId) || courses[0];
@@ -87,11 +91,13 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
     receiptObj: PaymentReceipt;
     password: string;
     phone: string;
+    student: Student;
   } | null>(null);
+  const [showForm, setShowForm] = useState(false);
 
   const handleProcessAdmission = () => {
-    if (!studentName.trim() || !phone.trim() || !email.trim()) {
-      setFormError('Please fill in the student name, phone number and email.');
+    if (!studentName.trim() || !phone.trim()) {
+      setFormError('Please fill in the student name and contact number.');
       return;
     }
     if (!advanceAmount || advanceAmount <= 0) {
@@ -113,7 +119,7 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
         studentName,
         email,
         phone,
-        gender,
+        gender: 'Not specified',
         address,
         guardianName,
         guardianPhone,
@@ -124,6 +130,18 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
         paymentPlan,
         paymentMethod,
         advancePaymentAmount: Number(advanceAmount),
+        form: {
+          qualification: form.qualification.trim(),
+          occupation: form.occupation.trim(),
+          dateOfBirth: form.dateOfBirth,
+          examsAttended: form.examsAttended.trim(),
+          specialCategory: form.specialCategory.trim() || 'None',
+          aim: form.aim.trim(),
+          reference: form.reference.trim(),
+          courseDetails: form.courseDetails.trim(),
+          photo: form.photo || undefined,
+          declarationAcceptedAt: new Date().toISOString()
+        },
         transactionRef: `GATEWAY-${paymentMethod.replace(/[^a-zA-Z]/g, '')}-${Date.now().toString().slice(-6)}`
         });
       } catch (err) {
@@ -139,13 +157,12 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
         receiptId: result.receipt.receiptNumber,
         receiptObj: result.receipt,
         password: result.credentials.password,
-        phone: result.student.phone
+        phone: result.student.phone,
+        student: result.student
       });
       setStep(3);
     }, 1200);
   };
-
-  const selectedBatchObj = batches.find(b => b.id === selectedBatchId);
 
   return (
     <Modal
@@ -186,161 +203,25 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
           </div>
         </div>
 
-        {/* Step 1: Student Information & Course/Batch */}
+        {/* Step 1: the academy's admission form, in the same order as the printed form */}
         {step === 1 && (
-          <div className="p-4 sm:p-6 space-y-5">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Student Full Name *
-                </label>
-                <input
-                  type="text"
-                  value={studentName}
-                  onChange={e => setStudentName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  placeholder="e.g. S. Ramanujam"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Primary Mobile Number *
-                </label>
-                <input
-                  type="text"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  placeholder="+91 98401 XXXXX"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Email Address *
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  placeholder="aspirant@gmail.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Gender & Residential Address
-                </label>
-                <div className="flex gap-2">
-                  <select
-                    value={gender}
-                    onChange={e => setGender(e.target.value)}
-                    className="w-28 px-2 py-2 text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
-                  <input
-                    type="text"
-                    value={address}
-                    onChange={e => setAddress(e.target.value)}
-                    className="flex-1 px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                    placeholder="Locality, City (e.g. Anna Nagar, Chennai)"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Parent / Guardian Name
-                </label>
-                <input
-                  type="text"
-                  value={guardianName}
-                  onChange={e => setGuardianName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  placeholder="Parent Name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Parent / Guardian Contact
-                </label>
-                <input
-                  type="text"
-                  value={guardianPhone}
-                  onChange={e => setGuardianPhone(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  placeholder="Emergency Contact"
-                />
-              </div>
+          <div className="p-4 sm:p-6 space-y-6">
+            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <span>Fields follow VRM's printed admission form. * required</span>
+              <span>Date: <b className="text-slate-800 dark:text-slate-200">{formatDate(new Date().toISOString().slice(0, 10))}</b></span>
             </div>
 
-            {/* Course & Batch Selection */}
-            <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-              <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-3">
-                Course & Batch Allocation
-              </h4>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Select Program / Course
-                  </label>
-                  <select
-                    value={selectedCourseId}
-                    onChange={e => setSelectedCourseId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  >
-                    {courses.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} — ₹{c.totalFee.toLocaleString('en-IN')}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                    Duration: {currentCourse?.durationMonths} Months · {currentCourse?.category}
-                  </p>
-                </div>
+            <AdmissionFormFields value={form} onChange={patchForm} courses={courses} batches={batches} batchMode="required" />
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Assign Classroom Batch
-                  </label>
-                  <select
-                    value={selectedBatchId}
-                    onChange={e => setSelectedBatchId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
-                  >
-                    {courseBatches.length > 0 ? (
-                      courseBatches.map(b => {
-                        const full = b.enrolledCount >= b.maxCapacity;
-                        return (
-                          <option key={b.id} value={b.id} disabled={full}>
-                            {full ? '[FULL] ' : ''}
-                            {b.name} ({b.timing})
-                          </option>
-                        );
-                      })
-                    ) : (
-                      <option value="">No active batches for this course</option>
-                    )}
-                  </select>
-                  {selectedBatchObj && (
-                    <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 flex items-center justify-between">
-                      <span>Room: {selectedBatchObj.room}</span>
-                      <span className="font-medium text-amber-700 dark:text-amber-400">
-                        Capacity: {selectedBatchObj.enrolledCount} / {selectedBatchObj.maxCapacity} seats filled
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+            <DeclarationChecklist
+              checked={decl.checked}
+              agreed={decl.agreed}
+              onChange={(c, a) => {
+                decl.setChecked(c);
+                decl.setAgreed(a);
+                setFormError('');
+              }}
+            />
 
             {formError && (
               <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg text-rose-700 dark:text-rose-300 text-xs">
@@ -348,26 +229,19 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
               </div>
             )}
             <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
-              >
+              <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white">
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  if (!studentName.trim() || !phone.trim() || !email.trim()) {
-                    setFormError('Please provide the student name, phone and email.');
+                  const err = validateAdmissionForm(form, { batches, requireBatch: true });
+                  if (err) {
+                    setFormError(err);
                     return;
                   }
-                  if (!selectedBatchObj) {
-                    setFormError('This course has no batch to join yet. Create a batch first.');
-                    return;
-                  }
-                  if (selectedBatchObj.enrolledCount >= selectedBatchObj.maxCapacity) {
-                    setFormError(`${selectedBatchObj.name} is full. Choose another batch.`);
+                  if (!decl.complete) {
+                    setFormError('Tick all declarations to continue.');
                     return;
                   }
                   setFormError('');
@@ -647,6 +521,14 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
                 <ShieldCheck className="w-4 h-4" />
                 <span>View & Print Official Receipt</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setShowForm(true)}
+                className="px-4 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+              >
+                Print Admission Form
+              </button>
               
               <button
                 type="button"
@@ -658,6 +540,7 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
             </div>
           </div>
         )}
+      {showForm && paymentSuccessData && <AdmissionFormPrint form={printableFromStudent(paymentSuccessData.student)} onClose={() => setShowForm(false)} />}
     </Modal>
   );
 };

@@ -12,37 +12,37 @@
   }
 }
 
-/* Printing: only the receipt / report marked .print-area is printed, without the app chrome. */
+/* Printing: only the receipt / form / report marked .print-area is printed, starting at the top of the page.
+   Everything else is removed from layout; ancestors of the print area are flattened (no fixed/blur/overflow),
+   because a backdrop-filter or transform on a popup would otherwise offset the printout. */
 @media print {
-  html,
-  body,
-  #root,
-  .app-shell,
-  .app-body,
-  .app-main,
-  .modal-root,
-  .modal-panel,
-  .modal-body {
+  html:has(.print-area),
+  body:has(.print-area),
+  #root:has(.print-area) {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  body:has(.print-area) *:not(.print-area):not(.print-area *):not(:has(.print-area)) {
+    display: none !important;
+  }
+  body *:has(.print-area) {
+    display: block !important;
+    position: static !important;
+    overflow: visible !important;
     height: auto !important;
     max-height: none !important;
-    overflow: visible !important;
-    position: static !important;
-    display: block !important;
-    background: #fff !important;
+    transform: none !important;
+    filter: none !important;
+    backdrop-filter: none !important;
     box-shadow: none !important;
     border: 0 !important;
-  }
-  body * {
-    visibility: hidden;
-  }
-  .print-area,
-  .print-area * {
-    visibility: visible;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #fff !important;
   }
   .print-area {
-    position: absolute !important;
-    left: 0;
-    top: 0;
-    width: 100%;
+    margin: 0 auto !important;
+    box-shadow: none !important;
   }
 }

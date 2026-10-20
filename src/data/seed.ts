@@ -68,7 +68,7 @@ const weighted = <T,>(pairs: [T, number][]): T => {
 const MALE = ['Arun', 'Bharath', 'Dinesh', 'Gokul', 'Hari', 'Karthikeyan', 'Manoj', 'Naveen', 'Pradeep', 'Rahul', 'Sanjay', 'Senthil', 'Surya', 'Vignesh', 'Ajith', 'Balaji', 'Ganesh', 'Kishore', 'Mukesh', 'Prakash', 'Ramesh', 'Sathish', 'Siva', 'Vasanth', 'Yogesh', 'Ashwin', 'Deepak', 'Jeevan', 'Lokesh', 'Nithin', 'Rohit', 'Tharun', 'Vikram', 'Abishek', 'Jerin', 'Ebin', 'Shibu', 'Anto', 'Joel', 'Ragul'];
 const FEMALE = ['Aishwarya', 'Bhavya', 'Divya', 'Gayathri', 'Harini', 'Janani', 'Kavya', 'Lakshmi', 'Monisha', 'Nandhini', 'Pavithra', 'Ramya', 'Sandhya', 'Sowmya', 'Swetha', 'Abinaya', 'Deepika', 'Keerthana', 'Madhumitha', 'Nivetha', 'Preethi', 'Revathi', 'Shalini', 'Sneha', 'Varsha', 'Anitha', 'Dharshini', 'Jenifer', 'Mahalakshmi', 'Priyanka', 'Sangeetha', 'Subha', 'Vaishnavi', 'Ancy', 'Merlin', 'Sherin', 'Jasmine', 'Ashly'];
 const SURNAMES = ['Murugan', 'Subramanian', 'Krishnan', 'Rajendran', 'Selvam', 'Pandian', 'Natarajan', 'Kumar', 'Raj', 'Sundaram', 'Ramasamy', 'Velu', 'Pillai', 'Nadar', 'Joseph', 'Thomas', 'Devadas', 'Shanmugam', 'Ganesan', 'Arumugam', 'Chandran', 'Mohan', 'Balasubramanian', 'Iyer', 'Venkatesh'];
-const PLACES = ['Nagercoil', 'Marthandam', 'Kanyakumari', 'Thuckalay', 'Colachel', 'Kuzhithurai', 'Tirunelveli', 'Tuticorin', 'Madurai', 'Chennai', 'Vadasery', 'Kottar', 'Suchindram', 'Eraniel', 'Thiruvananthapuram'];
+const PLACES = ['Perambalur', 'Perambalur', 'Ariyalur', 'Thuraiyur', 'Kunnam', 'Veppanthattai', 'Jayankondam', 'Tiruchirappalli', 'Lalgudi', 'Attur', 'Namakkal', 'Kallakurichi', 'Salem', 'Udayarpalayam', 'Chinnasalem'];
 const STREETS = ['Main Road', 'Church Street', 'Temple Street', 'Gandhi Nagar', 'Nehru Street', 'Anna Nagar', 'Bazaar Road', 'Lake View Road', 'College Road', 'Station Road'];
 const EMAIL_DOMAINS = ['gmail.com', 'gmail.com', 'gmail.com', 'yahoo.co.in', 'outlook.com'];
 
@@ -77,6 +77,7 @@ const phone = () => `+91 ${pick(['94', '95', '97', '98', '99', '63', '70', '80']
 // ---------- reference data ----------
 const TODAY = todayISO();
 const courseById = new Map(INITIAL_COURSES.map(c => [c.id, c]));
+const batchName = (id: string) => (INITIAL_BATCHES.find(b => b.id === id)?.timing || 'regular batch');
 
 /** How many students to put in each batch (featured students included). */
 const BATCH_TARGETS: Record<string, number> = {
@@ -228,6 +229,31 @@ export const buildSeed = (): SeedData => {
         paysOnTime: chance(0.8)
       });
     }
+  }
+
+  // 2b. Admission-form details for every student (matches VRM's printed form).
+  const QUALS = ['B.Sc Mathematics', 'B.E. Civil', 'B.A. History', 'B.Com', 'B.Sc Agriculture', 'B.E. ECE', 'M.A. Tamil', 'B.Sc Physics', 'M.Sc Chemistry', 'B.A. English', 'B.Tech IT'];
+  const OCCUPATIONS = ['Farmer', 'Teacher', 'Business', 'Govt. employee', 'Driver', 'Shop owner', 'Retired', 'Daily wage worker', 'Nurse'];
+  const AIMS: Record<string, string[]> = {
+    'GS Foundation': ['IAS', 'IPS', 'IFS', 'IRS'],
+    CSAT: ['Clear UPSC Prelims', 'IAS'],
+    'Optional Subject': ['IAS', 'Score 300+ in optional'],
+    'State PSC': ['Deputy Collector (Group 1)', 'DSP (Group 1)', 'Assistant Commissioner'],
+    'Test Series': ['IAS']
+  };
+  const REFERENCES = ['Friend studying here', 'Alumni recommendation', 'Website', 'Newspaper advertisement', 'Instagram', 'College seminar', 'Relative', 'Walk-in'];
+  const EXAMS = ['None (first attempt)', 'TNPSC Group 4 (2024)', 'TNPSC Group 2 Prelims (2024)', 'UPSC CSE Prelims (2025)', 'SSC CGL Tier 1 (2025)', 'IBPS PO Prelims (2024)', 'TNUSRB SI (2025)'];
+  for (const s of students) {
+    const course = courseById.get(s.enrolledCourseId)!;
+    s.qualification ||= pick(QUALS);
+    s.occupation ||= pick(OCCUPATIONS);
+    s.dateOfBirth ||= addDays(TODAY, -int(21 * 365, 30 * 365));
+    s.examsAttended ||= pick(EXAMS);
+    s.specialCategory ||= chance(0.9) ? 'None' : pick(['Person with disability', 'First graduate', 'Ex-serviceman']);
+    s.aim ||= pick(AIMS[course.category] || ['IAS']);
+    s.reference ||= pick(REFERENCES);
+    s.courseDetails ||= `Classroom, ${batchName(s.enrolledBatchId)}`;
+    s.declarationAcceptedAt ||= `${s.admissionDate}T10:00:00.000Z`;
   }
 
   // 3. Invoices + receipts (sequential numbering in date order).
@@ -559,7 +585,7 @@ export const buildSeed = (): SeedData => {
     ['demo_attended', 15],
     ['ready_to_join', 10]
   ];
-  const DROP_REASONS = ['Joined another academy in Chennai.', 'Fee too high; wants online-only course.', 'Postponed preparation to next year.', 'Not reachable after 3 attempts.', 'Preparing for bank exams instead.'];
+  const DROP_REASONS = ['Joined another academy in Trichy.', 'Fee too high; wants online-only course.', 'Postponed preparation to next year.', 'Not reachable after 3 attempts.', 'Preparing for bank exams instead.'];
   const openLeadCount = 64;
   const droppedLeadCount = 46;
   for (let i = 0; i < openLeadCount + droppedLeadCount; i++) {
@@ -606,6 +632,34 @@ export const buildSeed = (): SeedData => {
       location: pick(PLACES),
       followUps
     });
+  }
+  // Some website enquiries came in through the online admission form (full application attached).
+  const appCandidates = leads
+    .filter(l => l.source === 'website' && l.status !== 'converted' && l.status !== 'dropped' && !l.application && l.id.startsWith('lead-1'))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  let appSeq = 1;
+  for (const l of appCandidates) {
+    if (!chance(0.6)) continue;
+    const course = INITIAL_COURSES.find(c => c.name === l.targetCourse) || INITIAL_COURSES[0];
+    const preferred = INITIAL_BATCHES.filter(b => b.courseId === course.id);
+    l.application = {
+      applicationNumber: `APP-2026-${String(appSeq++).padStart(4, '0')}`,
+      submittedAt: l.createdAt,
+      courseId: course.id,
+      preferredBatchId: preferred.length && chance(0.6) ? pick(preferred).id : undefined,
+      courseDetails: pick(['Classroom', 'Classroom, weekend preferred', 'Morning batch preferred', '']),
+      qualification: pick(QUALS),
+      guardianName: `${pick(['S.', 'K.', 'R.', 'M.', 'P.'])} ${l.studentName.split(' ').pop()}`,
+      occupation: pick(OCCUPATIONS),
+      dateOfBirth: addDays(TODAY, -int(20 * 365, 29 * 365)),
+      guardianPhone: phone(),
+      specialCategory: 'None',
+      examsAttended: pick(EXAMS),
+      address: `${int(1, 200)}, ${pick(STREETS)}, ${l.location || pick(PLACES)}`,
+      aim: pick(AIMS[course.category] || ['IAS']),
+      reference: pick(REFERENCES),
+      declarationAcceptedAt: l.createdAt
+    };
   }
   leads.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
@@ -696,11 +750,11 @@ export const buildSeed = (): SeedData => {
 
 const MANAGEMENT_ACCOUNT: UserAccount = {
   id: 'usr-mgmt-01',
-  username: 'director@vrmiasacademy.in',
+  username: 'director@vrmiasacademy.com',
   password: 'admin123',
   role: 'management',
   name: 'Dr. V. R. Murugan, Ex-IRS',
-  email: 'director@vrmiasacademy.in',
+  email: 'director@vrmiasacademy.com',
   phone: '+91 98401 23456',
   designation: 'Founder & Director General',
   createdAt: '2020-01-01'

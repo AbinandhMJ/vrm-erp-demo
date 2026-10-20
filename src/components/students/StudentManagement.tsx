@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Modal } from '../common/Modal';
+import { AdmissionFormPrint, printableFromStudent } from '../admissions/AdmissionFormPrint';
 import { Student } from '../../types';
 import {
   GraduationCap,
@@ -33,6 +34,7 @@ export const StudentManagement: React.FC = () => {
   const [feeStatusFilter, setFeeStatusFilter] = useState('all');
   // Fee and payment details are for office and management only (not faculty).
   const canSeeFees = role === 'management' || role === 'office_staff';
+  const [formStudent, setFormStudent] = useState<Student | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
   const filteredStudents = students.filter(student => {
@@ -319,7 +321,15 @@ export const StudentManagement: React.FC = () => {
         </div>
         )}
 
-        <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+          {canSeeFees && (
+            <button
+              onClick={() => setFormStudent(selectedStudent)}
+              className="px-4 py-1.5 text-xs font-semibold text-slate-900 bg-amber-400 hover:bg-amber-300 rounded-lg"
+            >
+              Admission Form
+            </button>
+          )}
           <button
             onClick={() => setSelectedStudent(null)}
             className="px-4 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg"
@@ -330,6 +340,7 @@ export const StudentManagement: React.FC = () => {
         </Modal>
       )}
 
+      {formStudent && <AdmissionFormPrint form={printableFromStudent(formStudent)} onClose={() => setFormStudent(null)} />}
     </div>
   );
 };

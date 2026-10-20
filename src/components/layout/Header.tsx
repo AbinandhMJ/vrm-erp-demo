@@ -85,9 +85,9 @@ export const Header: React.FC = () => {
           {/* Academy Crest and Title */}
           <div className="flex items-center gap-2.5 min-w-0">
             <img
-              src="/vrm-emblem.jpg"
+              src="/vrm-logo.jpg"
               alt="VRM IAS Academy Crest"
-              className="w-9 h-9 shrink-0 rounded-full object-cover border border-amber-300 dark:border-amber-500/40 shadow-2xs"
+              className="w-9 h-9 shrink-0 rounded-lg object-contain bg-white p-0.5 border border-amber-300 dark:border-amber-500/40 shadow-2xs"
             />
             <div className="leading-tight min-w-0">
               <span className="text-sm sm:text-base font-bold tracking-tight text-slate-900 dark:text-white block truncate">

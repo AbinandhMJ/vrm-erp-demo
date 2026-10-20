@@ -1244,7 +1244,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateSettings = (patch: Partial<AcademySettings>) => setSettings(prev => ({ ...prev, ...patch }));
 
   // Automatic reminders: when a class is within its reminder window, its link goes out to its students once.
-  // (In this demo the "sending" happens while the app is open; a real deployment would run this on a server.)
+  // Everything runs in the browser: the "sending" is recorded locally while the app is open.
   useEffect(() => {
     const tick = () => {
       const now = new Date();

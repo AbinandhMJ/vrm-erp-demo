@@ -474,7 +474,7 @@ const BulkUploadModal: React.FC<{
         {space && (
           <div className="flex items-center gap-2 text-[11px] text-slate-500">
             <HardDrive className="w-3.5 h-3.5" />
-            Storage in this browser: {formatBytes(space.used)} used of about {formatBytes(space.quota)}. (In production, files go to the academy's cloud storage.)
+            Storage in this browser: {formatBytes(space.used)} used of about {formatBytes(space.quota)}. Files stay on this device.
           </div>
         )}
         {error && <p className="text-xs text-rose-600 font-semibold">{error}</p>}

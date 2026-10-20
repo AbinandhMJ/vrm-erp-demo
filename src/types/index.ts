@@ -127,8 +127,21 @@ export interface Student {
   averageTestScore: number;
   portalUsername: string;
   status: 'active' | 'graduated' | 'suspended';
-  guardianName: string;
+  guardianName: string; // "Father/Husband Name" on the admission form
   guardianPhone: string;
+  // ---- Fields from VRM's printed admission form ----
+  qualification?: string;
+  occupation?: string;
+  dateOfBirth?: string; // YYYY-MM-DD
+  examsAttended?: string;
+  specialCategory?: string;
+  aim?: string;
+  reference?: string;
+  courseDetails?: string;
+  /** Passport photo as a small JPEG data URL (resized in the browser before saving). */
+  photo?: string;
+  /** When the student and parent/guardian accepted the admission declarations. */
+  declarationAcceptedAt?: string;
 }
 
 export interface Invoice {

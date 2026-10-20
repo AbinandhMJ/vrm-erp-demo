@@ -1,6 +1,7 @@
 import { printLight } from '../../lib/print';
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { ACADEMY } from '../../config/academy';
 import { BarsChart, LinesChart, lakhs, pct } from '../charts/Charts';
 import { bands, weeklyAttendance } from '../../lib/metrics';
 import {
@@ -163,7 +164,7 @@ export const ReportingView: React.FC = () => {
             <div>
               <h1 className="text-xl font-bold tracking-tight text-slate-900">VRM IAS ACADEMY</h1>
               <p className="text-xs text-slate-500 font-medium">Directorate of Academic Standards & Mentorship Evaluations</p>
-              <p className="text-xs text-slate-400">Anna Nagar Campus, Chennai · Official Academic Report</p>
+              <p className="text-xs text-slate-400">{ACADEMY.addressLine}</p>
             </div>
           </div>
 

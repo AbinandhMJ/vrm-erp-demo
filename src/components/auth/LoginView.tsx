@@ -118,7 +118,7 @@ export const LoginView: React.FC = () => {
                   setUsername(e.target.value);
                   setError('');
                 }}
-                placeholder="VRM-2026-001 or name@vrmiasacademy.in"
+                placeholder="VRM-2026-001 or name@vrmiasacademy.com"
                 className="w-full h-11 px-3.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#e09f3e] focus:border-[#e09f3e]"
               />
             </div>

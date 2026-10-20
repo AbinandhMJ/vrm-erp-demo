@@ -22,10 +22,10 @@ Deploys to Vercel as a static Vite app (build command `npm run build`, output `d
 
 | Role | Username | Password |
 | --- | --- | --- |
-| Management | `director@vrmiasacademy.in` | `admin123` |
-| Office / Finance | `registrar@vrmiasacademy.in` | `office123` |
-| Faculty | `ramanathan.polity@vrmiasacademy.in` | `faculty123` |
-| Counselor / Field agent | `deepa.outreach@vrmiasacademy.in` | `agent123` |
+| Management | `director@vrmiasacademy.com` | `admin123` |
+| Office / Finance | `registrar@vrmiasacademy.com` | `office123` |
+| Faculty | `ramanathan.polity@vrmiasacademy.com` | `faculty123` |
+| Counselor / Field agent | `deepa.outreach@vrmiasacademy.com` | `agent123` |
 | Student | `VRM-2026-089` (after loading sample data) | `student123` |
 
 The login screen also has one-click persona cards.
@@ -38,8 +38,9 @@ Students you enroll log in with their roll number (first one is `VRM-2026-001`) 
 
 1. **Counselor** → Admissions & CRM → *Field Agent Quick Mode* → add a lead. It is auto-assigned to the
    least-busy counselor for that course; duplicate phone numbers are blocked.
-2. **Office** → *Enroll Student* (or *Admit* on a lead) → pick course/batch (full batches are blocked), scholarship,
-   payment plan and advance → confirm. Installment invoices, a receipt, a roster seat and a portal login are created.
+2. **Office** → *Enroll Student* (or *Admit* on a lead) → fill VRM's admission form (same fields and order as the
+   printed form, with photo and the three declarations) → scholarship, payment plan and advance → confirm.
+   *Print Admission Form* produces the academy's form, filled in, ready for signatures. Installment invoices, a receipt, a roster seat and a portal login are created.
 3. Sign out and log in **as that student** with the credentials shown → see course, timetable, fees, receipts,
    upcoming payment; pay the next installment online (simulated gateway).
 4. **Faculty** → mark attendance for a batch → the student's attendance history updates.
@@ -59,6 +60,8 @@ Use the ↺ menu in the header to load sample data or clear everything.
   class attendance, test attempts, leads, staff attendance and payroll, all dated relative to today.
 - `src/context/AppContext.tsx`: state + actions. Attendance %, fee balances, test averages, seat counts and
   counselor KPIs are **derived** from the records, never stored, so every screen stays consistent.
+- `src/config/academy.ts`: academy name, address, phone, email and declaration text (from VRM's admission form);
+  used on receipts, statements, reports and the printed admission form.
 - `src/config/access.ts`: which role can open which module (used by both the sidebar and the router).
 - `src/components/common/Modal.tsx`: every popup uses this (fixed header with close button, Esc/backdrop close,
   bottom sheet on phones). `src/components/charts/Charts.tsx`: chart kit (Recharts) used by dashboards and reports.

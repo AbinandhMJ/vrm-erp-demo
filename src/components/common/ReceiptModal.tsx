@@ -1,6 +1,7 @@
 import { printLight } from '../../lib/print';
 import React from 'react';
 import { PaymentReceipt } from '../../types';
+import { ACADEMY } from '../../config/academy';
 import { Printer, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { Modal } from './Modal';
 
@@ -46,8 +47,9 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose }) 
               />
               <div>
                 <h2 className="text-xl font-bold tracking-tight text-slate-900">VRM IAS ACADEMY</h2>
-                <p className="text-xs text-slate-500 font-medium">Center for Civil Services Mentorship & Public Policy</p>
-                <p className="text-xs text-slate-400">Anna Nagar, Chennai - 600040 · Ph: +91 98401 23456</p>
+                <p className="text-xs text-slate-500 font-medium">{ACADEMY.certification}</p>
+                <p className="text-xs text-slate-400">{ACADEMY.addressLine}</p>
+                <p className="text-xs text-slate-400">{ACADEMY.phone} · {ACADEMY.email}</p>
               </div>
             </div>
             <div className="sm:text-right">

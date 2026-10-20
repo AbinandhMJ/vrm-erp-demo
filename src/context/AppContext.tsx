@@ -69,6 +69,11 @@ export interface AdmissionInput {
   paymentMethod: PaymentMethod;
   advancePaymentAmount: number;
   transactionRef?: string;
+  /** Extra fields from the academy's admission form. */
+  form?: Pick<
+    Student,
+    'qualification' | 'occupation' | 'dateOfBirth' | 'examsAttended' | 'specialCategory' | 'aim' | 'reference' | 'courseDetails' | 'photo' | 'declarationAcceptedAt'
+  >;
 }
 
 export interface Credentials {
@@ -606,7 +611,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       portalUsername: rollNumber,
       status: 'active',
       guardianName: data.guardianName,
-      guardianPhone: data.guardianPhone || data.phone
+      guardianPhone: data.guardianPhone || data.phone,
+      ...data.form
     };
 
     // Invoices for each installment, numbered sequentially across the academy.

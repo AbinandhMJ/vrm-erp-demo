@@ -5,6 +5,7 @@ import { BarsChart, ChartCard, lakhs } from '../charts/Charts';
 import { lastMonths } from '../../lib/metrics';
 import { invoiceBalance } from '../../lib/fees';
 import { useApp } from '../../context/AppContext';
+import { ACADEMY } from '../../config/academy';
 import { Modal } from '../common/Modal';
 import { Invoice, PaymentReceipt, Student } from '../../types';
 import {
@@ -1328,7 +1329,7 @@ export const FeeManagement: React.FC = () => {
                       VRM IAS Academy
                     </h2>
                     <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                      Premier Civil Services Coaching · Anna Nagar West, Chennai - 600040
+                      {ACADEMY.addressLine} · {ACADEMY.phone}
                     </p>
                   </div>
                 </div>

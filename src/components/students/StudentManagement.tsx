@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Modal } from '../common/Modal';
-import { AdmissionFormPrint } from '../admissions/AdmissionFormPrint';
+import { AdmissionFormPrint, printableFromStudent } from '../admissions/AdmissionFormPrint';
 import { Student } from '../../types';
 import {
   GraduationCap,
@@ -340,7 +340,7 @@ export const StudentManagement: React.FC = () => {
         </Modal>
       )}
 
-      {formStudent && <AdmissionFormPrint student={formStudent} onClose={() => setFormStudent(null)} />}
+      {formStudent && <AdmissionFormPrint form={printableFromStudent(formStudent)} onClose={() => setFormStudent(null)} />}
     </div>
   );
 };

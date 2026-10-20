@@ -633,6 +633,34 @@ export const buildSeed = (): SeedData => {
       followUps
     });
   }
+  // Some website enquiries came in through the online admission form (full application attached).
+  const appCandidates = leads
+    .filter(l => l.source === 'website' && l.status !== 'converted' && l.status !== 'dropped' && !l.application && l.id.startsWith('lead-1'))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  let appSeq = 1;
+  for (const l of appCandidates) {
+    if (!chance(0.6)) continue;
+    const course = INITIAL_COURSES.find(c => c.name === l.targetCourse) || INITIAL_COURSES[0];
+    const preferred = INITIAL_BATCHES.filter(b => b.courseId === course.id);
+    l.application = {
+      applicationNumber: `APP-2026-${String(appSeq++).padStart(4, '0')}`,
+      submittedAt: l.createdAt,
+      courseId: course.id,
+      preferredBatchId: preferred.length && chance(0.6) ? pick(preferred).id : undefined,
+      courseDetails: pick(['Classroom', 'Classroom, weekend preferred', 'Morning batch preferred', '']),
+      qualification: pick(QUALS),
+      guardianName: `${pick(['S.', 'K.', 'R.', 'M.', 'P.'])} ${l.studentName.split(' ').pop()}`,
+      occupation: pick(OCCUPATIONS),
+      dateOfBirth: addDays(TODAY, -int(20 * 365, 29 * 365)),
+      guardianPhone: phone(),
+      specialCategory: 'None',
+      examsAttended: pick(EXAMS),
+      address: `${int(1, 200)}, ${pick(STREETS)}, ${l.location || pick(PLACES)}`,
+      aim: pick(AIMS[course.category] || ['IAS']),
+      reference: pick(REFERENCES),
+      declarationAcceptedAt: l.createdAt
+    };
+  }
   leads.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   // 7. Staff: attendance for the last ~4 months (Mon–Sat) and monthly payroll for 6 months.

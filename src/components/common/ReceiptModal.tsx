@@ -41,9 +41,9 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose }) 
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-slate-200 pb-6 mb-6">
             <div className="flex items-center gap-4">
               <img
-                src="/vrm-emblem.jpg"
+                src="/vrm-logo.jpg"
                 alt="VRM IAS Academy Emblem"
-                className="w-16 h-16 rounded-full object-cover border border-amber-200 shadow-xs"
+                className="w-16 h-16 rounded-lg object-contain bg-white p-0.5 border border-amber-200 shadow-xs"
               />
               <div>
                 <h2 className="text-xl font-bold tracking-tight text-slate-900">VRM IAS ACADEMY</h2>

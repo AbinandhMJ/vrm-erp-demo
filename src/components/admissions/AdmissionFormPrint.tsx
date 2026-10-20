@@ -1,6 +1,6 @@
 import React from 'react';
 import { Printer } from 'lucide-react';
-import { Student } from '../../types';
+import { Batch, Course, Lead, Student } from '../../types';
 import { Modal } from '../common/Modal';
 import { ACADEMY, ADMISSION_DECLARATIONS } from '../../config/academy';
 import { formatDate } from '../../lib/dates';
@@ -12,29 +12,117 @@ const PLAN_LABEL: Record<Student['paymentPlan'], string> = {
   three_installments: '3 installments'
 };
 
-/** The academy's paper admission form, filled in from the student record, ready to print and sign. */
-export const AdmissionFormPrint: React.FC<{ student: Student; onClose: () => void }> = ({ student, onClose }) => {
+/** Everything the printed form shows; built from an admitted student or an online application. */
+export interface PrintableAdmissionForm {
+  heading: string; // modal subtitle
+  date: string; // YYYY-MM-DD shown as "Date"
+  courseName: string;
+  batchName?: string;
+  courseDetails?: string;
+  name: string;
+  qualification?: string;
+  guardianName?: string;
+  occupation?: string;
+  dateOfBirth?: string;
+  phone: string;
+  guardianPhone?: string;
+  email?: string;
+  examsAttended?: string;
+  address?: string;
+  specialCategory?: string;
+  aim?: string;
+  reference?: string;
+  photo?: string;
+  declarationAcceptedAt?: string;
+  officeUse: [string, string][];
+}
+
+export const printableFromStudent = (s: Student): PrintableAdmissionForm => ({
+  heading: `${s.name} · ${s.rollNumber}`,
+  date: s.admissionDate,
+  courseName: s.enrolledCourseName,
+  batchName: s.enrolledBatchName,
+  courseDetails: s.courseDetails,
+  name: s.name,
+  qualification: s.qualification,
+  guardianName: s.guardianName,
+  occupation: s.occupation,
+  dateOfBirth: s.dateOfBirth,
+  phone: s.phone,
+  guardianPhone: s.guardianPhone !== s.phone ? s.guardianPhone : undefined,
+  email: s.email,
+  examsAttended: s.examsAttended,
+  address: s.address,
+  specialCategory: s.specialCategory,
+  aim: s.aim,
+  reference: s.reference,
+  photo: s.photo,
+  declarationAcceptedAt: s.declarationAcceptedAt,
+  officeUse: [
+    ['Roll No', s.rollNumber],
+    ['Batch', s.enrolledBatchName],
+    ['Fee', `₹${s.netFee.toLocaleString('en-IN')} (${PLAN_LABEL[s.paymentPlan]})`],
+    ['Declaration accepted', s.declarationAcceptedAt ? formatDate(s.declarationAcceptedAt.slice(0, 10)) : '—']
+  ]
+});
+
+export const printableFromApplication = (lead: Lead, courses: Course[], batches: Batch[]): PrintableAdmissionForm | null => {
+  const a = lead.application;
+  if (!a) return null;
+  const batch = batches.find(b => b.id === a.preferredBatchId);
+  return {
+    heading: `${lead.studentName} · ${a.applicationNumber}`,
+    date: a.submittedAt.slice(0, 10),
+    courseName: courses.find(c => c.id === a.courseId)?.name || lead.targetCourse,
+    batchName: batch ? `Preferred: ${batch.name}` : undefined,
+    courseDetails: a.courseDetails,
+    name: lead.studentName,
+    qualification: a.qualification,
+    guardianName: a.guardianName,
+    occupation: a.occupation,
+    dateOfBirth: a.dateOfBirth,
+    phone: lead.phone,
+    guardianPhone: a.guardianPhone,
+    email: lead.email,
+    examsAttended: a.examsAttended,
+    address: a.address,
+    specialCategory: a.specialCategory,
+    aim: a.aim,
+    reference: a.reference,
+    photo: a.photo,
+    declarationAcceptedAt: a.declarationAcceptedAt,
+    officeUse: [
+      ['Application No', a.applicationNumber],
+      ['Submitted online', formatDate(a.submittedAt.slice(0, 10))],
+      ['Counselor', lead.assignedCounselorName],
+      ['Status', lead.status === 'converted' ? 'Admitted' : 'Pending admission']
+    ]
+  };
+};
+
+/** The academy's paper admission form, filled in, ready to print and sign. */
+export const AdmissionFormPrint: React.FC<{ form: PrintableAdmissionForm; onClose: () => void }> = ({ form: f, onClose }) => {
   const rows: [string, React.ReactNode][] = [
-    ['Course Applied for', student.enrolledCourseName],
-    ['Name of the Student', student.name],
-    ['Qualification', student.qualification],
-    ['Father/Husband Name', student.guardianName],
-    ['Occupation', student.occupation],
-    ['Date of Birth', student.dateOfBirth ? formatDate(student.dateOfBirth) : ''],
-    ['Contact Number', [student.phone, student.guardianPhone && student.guardianPhone !== student.phone ? `Parent: ${student.guardianPhone}` : ''].filter(Boolean).join('   ')],
-    ['e-Mail ID', student.email],
-    ['Exams attended Details', student.examsAttended],
-    ['Address', student.address],
-    ['Special Category', student.specialCategory],
-    ['Aim', student.aim],
-    ['Reference', student.reference],
-    ['Course Details', [student.enrolledBatchName, student.courseDetails].filter(Boolean).join(' · ')]
+    ['Course Applied for', f.courseName],
+    ['Name of the Student', f.name],
+    ['Qualification', f.qualification],
+    ['Father/Husband Name', f.guardianName],
+    ['Occupation', f.occupation],
+    ['Date of Birth', f.dateOfBirth ? formatDate(f.dateOfBirth) : ''],
+    ['Contact Number', [f.phone, f.guardianPhone ? `Parent: ${f.guardianPhone}` : ''].filter(Boolean).join('   ')],
+    ['e-Mail ID', f.email],
+    ['Exams attended Details', f.examsAttended],
+    ['Address', f.address],
+    ['Special Category', f.specialCategory],
+    ['Aim', f.aim],
+    ['Reference', f.reference],
+    ['Course Details', [f.batchName, f.courseDetails].filter(Boolean).join(' · ')]
   ];
 
   return (
     <Modal
       title="Admission form"
-      subtitle={`${student.name} · ${student.rollNumber}`}
+      subtitle={f.heading}
       onClose={onClose}
       size="xl"
       bodyClassName="p-0 bg-slate-100 dark:bg-slate-950"
@@ -52,12 +140,10 @@ export const AdmissionFormPrint: React.FC<{ student: Student; onClose: () => voi
         <div className="print-area mx-auto max-w-[760px] bg-white text-slate-900 border-[3px] border-double border-slate-900 p-4 sm:p-6 font-[Arial,sans-serif]">
           {/* Letterhead */}
           <div className="border-2 border-[#1f3a8a] rounded-2xl px-3 py-3 flex items-center gap-3">
-            <img src="/vrm-emblem.jpg" alt="" className="w-14 h-14 sm:w-20 sm:h-20 rounded-full object-cover shrink-0" />
+            <img src="/vrm-logo.jpg" alt="" className="w-14 h-14 sm:w-20 sm:h-20 rounded-lg object-contain bg-white p-0.5 shrink-0" />
             <div className="flex-1 text-center min-w-0">
               <p className="text-[10px] sm:text-xs font-bold text-red-600">{ACADEMY.tagline}</p>
-              <p className="mt-1 inline-block bg-red-600 text-white font-black tracking-tight text-xl sm:text-3xl px-3 leading-tight">
-                <span className="text-yellow-300">VRM</span> IAS ACADEMY
-              </p>
+              <img src="/vrm-wordmark.jpg" alt="VRM IAS Academy" className="mt-1 mx-auto h-7 sm:h-11 w-auto max-w-full" />
               <p className="text-[9px] sm:text-[11px] font-bold text-red-700 mt-1">({ACADEMY.gateway})</p>
               <p className="text-[10px] sm:text-sm font-bold text-green-800">({ACADEMY.certification})</p>
               <p className="text-[9px] sm:text-xs text-[#1f3a8a]">{ACADEMY.addressLine}</p>
@@ -70,14 +156,14 @@ export const AdmissionFormPrint: React.FC<{ student: Student; onClose: () => voi
           <div className="mt-4 flex items-center justify-between gap-2">
             <span className="w-16 sm:w-28" />
             <h2 className="px-4 py-1 border-2 border-[#1f3a8a] bg-blue-50 text-sm sm:text-lg font-black tracking-wide rounded">STUDENT ADMISSION FORM</h2>
-            <span className="text-[11px] sm:text-sm font-bold whitespace-nowrap">Date: {formatDate(student.admissionDate)}</span>
+            <span className="text-[11px] sm:text-sm font-bold whitespace-nowrap">Date: {formatDate(f.date)}</span>
           </div>
 
           {/* Fields + photo */}
           <div className="mt-4 relative">
             <div className="absolute right-0 top-0 w-24 h-30 sm:w-32 sm:h-40 rounded-xl border-2 border-[#1f3a8a] overflow-hidden bg-slate-50 flex items-center justify-center">
-              {student.photo ? (
-                <img src={student.photo} alt="Student" className="w-full h-full object-cover" />
+              {f.photo ? (
+                <img src={f.photo} alt="Student" className="w-full h-full object-cover" />
               ) : (
                 <span className="text-[10px] text-slate-400 text-center px-2">Affix passport photo</span>
               )}
@@ -110,18 +196,11 @@ export const AdmissionFormPrint: React.FC<{ student: Student; onClose: () => voi
 
           {/* Office use */}
           <div className="mt-6 pt-3 border-t-2 border-dashed border-slate-400 text-[10px] sm:text-[11px] text-slate-700 grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <span>
-              <b>Roll No:</b> {student.rollNumber}
-            </span>
-            <span>
-              <b>Batch:</b> {student.enrolledBatchName}
-            </span>
-            <span>
-              <b>Fee:</b> ₹{student.netFee.toLocaleString('en-IN')} ({PLAN_LABEL[student.paymentPlan]})
-            </span>
-            <span>
-              <b>Declaration accepted:</b> {student.declarationAcceptedAt ? formatDate(student.declarationAcceptedAt.slice(0, 10)) : '—'}
-            </span>
+            {f.officeUse.map(([k, v]) => (
+              <span key={k}>
+                <b>{k}:</b> {v}
+              </span>
+            ))}
           </div>
         </div>
       </div>

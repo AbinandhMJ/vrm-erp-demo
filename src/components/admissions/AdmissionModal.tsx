@@ -2,10 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Modal } from '../common/Modal';
 import { Lead, ScholarshipType, PaymentPlanType, PaymentReceipt, Student } from '../../types';
-import { AdmissionFormPrint } from './AdmissionFormPrint';
+import { AdmissionFormPrint, printableFromStudent } from './AdmissionFormPrint';
 import { computeDiscount } from '../../lib/fees';
-import { resizePhoto } from '../../lib/photo';
-import { ADMISSION_DECLARATIONS } from '../../config/academy';
+import {
+  AdmissionFormFields,
+  AdmissionFormValues,
+  DeclarationChecklist,
+  blankForm,
+  firstOpenBatch,
+  formFromLead,
+  useDeclarations,
+  validateAdmissionForm
+} from './AdmissionFormFields';
 import { formatDate } from '../../lib/dates';
 import {
   X,
@@ -18,9 +26,6 @@ import {
   ShieldCheck,
   Camera
 } from 'lucide-react';
-
-const FIELD = 'w-full px-3 py-2 text-sm sm:text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500';
-const LBL = 'block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1';
 
 interface AdmissionModalProps {
   initialLead?: Lead;
@@ -37,43 +42,20 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   
-  // Student Info
-  const [studentName, setStudentName] = useState(initialLead?.studentName || '');
-  const [phone, setPhone] = useState(initialLead?.phone || '');
-  const [email, setEmail] = useState(initialLead?.email || '');
-  const [address, setAddress] = useState(initialLead?.location || '');
-  const [guardianName, setGuardianName] = useState(''); // Father / Husband name
-  const [formError, setFormError] = useState('');
-  const [guardianPhone, setGuardianPhone] = useState('');
-  // Fields from the academy's printed admission form
-  const [qualification, setQualification] = useState('');
-  const [occupation, setOccupation] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState('');
-  const [examsAttended, setExamsAttended] = useState('');
-  const [specialCategory, setSpecialCategory] = useState('');
-  const [aim, setAim] = useState('');
-  const [reference, setReference] = useState(
-    initialLead ? `${initialLead.source.replace('_', ' ')} enquiry, counselor ${initialLead.assignedCounselorName}` : ''
+  // The academy's admission form (shared with the online application page)
+  const [form, setForm] = useState<AdmissionFormValues>(() =>
+    initialLead ? formFromLead(initialLead, courses, batches) : blankForm(courses[0]?.id || '', firstOpenBatch(batches, courses[0]?.id || '')?.id || '')
   );
-  const [courseDetails, setCourseDetails] = useState('');
-  const [photo, setPhoto] = useState('');
-  const [photoError, setPhotoError] = useState('');
-  const [declarations, setDeclarations] = useState<boolean[]>(ADMISSION_DECLARATIONS.map(() => false));
-  const [signedBy, setSignedBy] = useState(false);
-
-  // Course & Batch
-  const defaultCourse = courses.find(c => c.name === initialLead?.targetCourse) || courses[0];
-  const [selectedCourseId, setSelectedCourseId] = useState(defaultCourse?.id || courses[0]?.id || '');
-  
-  const courseBatches = batches.filter(b => b.courseId === selectedCourseId);
-  const firstOpen = (list: typeof batches) => list.find(b => b.enrolledCount < b.maxCapacity) || list[0];
-  const [selectedBatchId, setSelectedBatchId] = useState(firstOpen(courseBatches)?.id || '');
-
-  useEffect(() => {
-    // Only reset the batch when the course changes (not when seat counts update after admission).
-    setSelectedBatchId(firstOpen(batches.filter(b => b.courseId === selectedCourseId))?.id || '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCourseId]);
+  const patchForm = (patch: Partial<AdmissionFormValues>) => {
+    setForm(f => ({ ...f, ...patch }));
+    setFormError('');
+  };
+  const decl = useDeclarations();
+  const [formError, setFormError] = useState('');
+  const { studentName, phone, email, address, guardianName, guardianPhone } = form;
+  const selectedCourseId = form.courseId;
+  const selectedBatchId = form.batchId;
+  const selectedBatchObj = batches.find(b => b.id === selectedBatchId);
 
   // Fee & Scholarship
   const currentCourse = courses.find(c => c.id === selectedCourseId) || courses[0];
@@ -149,15 +131,15 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
         paymentMethod,
         advancePaymentAmount: Number(advanceAmount),
         form: {
-          qualification: qualification.trim(),
-          occupation: occupation.trim(),
-          dateOfBirth,
-          examsAttended: examsAttended.trim(),
-          specialCategory: specialCategory.trim() || 'None',
-          aim: aim.trim(),
-          reference: reference.trim(),
-          courseDetails: courseDetails.trim(),
-          photo: photo || undefined,
+          qualification: form.qualification.trim(),
+          occupation: form.occupation.trim(),
+          dateOfBirth: form.dateOfBirth,
+          examsAttended: form.examsAttended.trim(),
+          specialCategory: form.specialCategory.trim() || 'None',
+          aim: form.aim.trim(),
+          reference: form.reference.trim(),
+          courseDetails: form.courseDetails.trim(),
+          photo: form.photo || undefined,
           declarationAcceptedAt: new Date().toISOString()
         },
         transactionRef: `GATEWAY-${paymentMethod.replace(/[^a-zA-Z]/g, '')}-${Date.now().toString().slice(-6)}`
@@ -181,8 +163,6 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
       setStep(3);
     }, 1200);
   };
-
-  const selectedBatchObj = batches.find(b => b.id === selectedBatchId);
 
   return (
     <Modal
@@ -231,188 +211,17 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
               <span>Date: <b className="text-slate-800 dark:text-slate-200">{formatDate(new Date().toISOString().slice(0, 10))}</b></span>
             </div>
 
-            {/* Course applied for */}
-            <section className="space-y-3">
-              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Course applied for</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className={LBL}>Course applied for *</label>
-                  <select value={selectedCourseId} onChange={e => setSelectedCourseId(e.target.value)} className={FIELD}>
-                    {courses.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} (₹{c.totalFee.toLocaleString('en-IN')})
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                    {currentCourse?.durationMonths} months · {currentCourse?.category}
-                  </p>
-                </div>
-                <div>
-                  <label className={LBL}>Batch *</label>
-                  <select value={selectedBatchId} onChange={e => setSelectedBatchId(e.target.value)} className={FIELD}>
-                    {courseBatches.length > 0 ? (
-                      courseBatches.map(b => {
-                        const full = b.enrolledCount >= b.maxCapacity;
-                        return (
-                          <option key={b.id} value={b.id} disabled={full}>
-                            {full ? '[FULL] ' : ''}
-                            {b.name} ({b.timing})
-                          </option>
-                        );
-                      })
-                    ) : (
-                      <option value="">No batch for this course yet</option>
-                    )}
-                  </select>
-                  {selectedBatchObj && (
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                      {selectedBatchObj.days} · {selectedBatchObj.room} · {selectedBatchObj.enrolledCount}/{selectedBatchObj.maxCapacity} seats filled
-                    </p>
-                  )}
-                </div>
-                <div className="md:col-span-2">
-                  <label className={LBL}>Course details</label>
-                  <input value={courseDetails} onChange={e => setCourseDetails(e.target.value)} className={FIELD} placeholder="e.g. Classroom, morning batch, Prelims + Mains" />
-                </div>
-              </div>
-            </section>
+            <AdmissionFormFields value={form} onChange={patchForm} courses={courses} batches={batches} batchMode="required" />
 
-            {/* Student details + photo */}
-            <section className="space-y-3">
-              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Student details</h4>
-              <div className="flex flex-col-reverse sm:flex-row gap-4">
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <label className={LBL}>Name of the student *</label>
-                    <input value={studentName} onChange={e => setStudentName(e.target.value)} className={FIELD} placeholder="As in certificates" />
-                  </div>
-                  <div>
-                    <label className={LBL}>Qualification</label>
-                    <input value={qualification} onChange={e => setQualification(e.target.value)} className={FIELD} placeholder="e.g. B.Sc Mathematics" list="qual-options" />
-                    <datalist id="qual-options">
-                      {['10th', '12th', 'Diploma', 'B.A.', 'B.Sc', 'B.Com', 'B.E. / B.Tech', 'M.A.', 'M.Sc', 'M.B.A.', 'Ph.D'].map(q => (
-                        <option key={q} value={q} />
-                      ))}
-                    </datalist>
-                  </div>
-                  <div>
-                    <label className={LBL}>Father / Husband name *</label>
-                    <input value={guardianName} onChange={e => setGuardianName(e.target.value)} className={FIELD} />
-                  </div>
-                  <div>
-                    <label className={LBL}>Occupation</label>
-                    <input value={occupation} onChange={e => setOccupation(e.target.value)} className={FIELD} placeholder="e.g. Student, Farmer, Teacher" />
-                  </div>
-                  <div>
-                    <label className={LBL}>Date of birth *</label>
-                    <input type="date" value={dateOfBirth} max={new Date().toISOString().slice(0, 10)} onChange={e => setDateOfBirth(e.target.value)} className={FIELD} />
-                  </div>
-                </div>
-
-                <div className="sm:w-36 shrink-0">
-                  <label className={LBL}>Photo</label>
-                  <label className="block w-32 h-40 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 overflow-hidden cursor-pointer hover:border-amber-500 focus-within:ring-2 focus-within:ring-amber-500">
-                    {photo ? (
-                      <img src={photo} alt="Student photo" className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="h-full flex flex-col items-center justify-center text-center text-[11px] text-slate-500 px-2">
-                        <Camera className="w-5 h-5 mb-1" />
-                        Add passport photo
-                      </span>
-                    )}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="user"
-                      className="sr-only"
-                      onChange={async e => {
-                        const f = e.target.files?.[0];
-                        if (!f) return;
-                        try {
-                          setPhoto(await resizePhoto(f));
-                          setPhotoError('');
-                        } catch (err) {
-                          setPhotoError(err instanceof Error ? err.message : 'Could not use this image.');
-                        }
-                      }}
-                    />
-                  </label>
-                  {photo && (
-                    <button type="button" onClick={() => setPhoto('')} className="mt-1 text-[11px] text-rose-600 hover:underline">
-                      Remove photo
-                    </button>
-                  )}
-                  {photoError && <p className="mt-1 text-[11px] text-rose-600">{photoError}</p>}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className={LBL}>Contact number *</label>
-                  <input type="tel" inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)} className={FIELD} placeholder="+91 9XXXX XXXXX" />
-                </div>
-                <div>
-                  <label className={LBL}>e-Mail ID</label>
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={FIELD} placeholder="name@gmail.com" />
-                </div>
-                <div>
-                  <label className={LBL}>Parent / guardian phone</label>
-                  <input type="tel" inputMode="tel" value={guardianPhone} onChange={e => setGuardianPhone(e.target.value)} className={FIELD} placeholder="For attendance and fee alerts" />
-                </div>
-                <div>
-                  <label className={LBL}>Special category</label>
-                  <input value={specialCategory} onChange={e => setSpecialCategory(e.target.value)} className={FIELD} placeholder="None" list="cat-options" />
-                  <datalist id="cat-options">
-                    {['None', 'Person with disability', 'Ex-serviceman', 'Destitute widow', 'First graduate', 'Sports person'].map(c => (
-                      <option key={c} value={c} />
-                    ))}
-                  </datalist>
-                </div>
-                <div className="md:col-span-2">
-                  <label className={LBL}>Exams attended details</label>
-                  <textarea rows={2} value={examsAttended} onChange={e => setExamsAttended(e.target.value)} className={FIELD} placeholder="e.g. TNPSC Group 4 (2024), cleared prelims; UPSC CSE 2025 prelims" />
-                </div>
-                <div className="md:col-span-2">
-                  <label className={LBL}>Address</label>
-                  <textarea rows={2} value={address} onChange={e => setAddress(e.target.value)} className={FIELD} placeholder="Door no, street, town, district, PIN" />
-                </div>
-                <div>
-                  <label className={LBL}>Aim</label>
-                  <input value={aim} onChange={e => setAim(e.target.value)} className={FIELD} placeholder="e.g. IAS, Deputy Collector, SI of Police" />
-                </div>
-                <div>
-                  <label className={LBL}>Reference</label>
-                  <input value={reference} onChange={e => setReference(e.target.value)} className={FIELD} placeholder="Who referred / how they heard of us" />
-                </div>
-              </div>
-            </section>
-
-            {/* Declaration */}
-            <section className="space-y-2 p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40">
-              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Declaration *</h4>
-              {ADMISSION_DECLARATIONS.map((d, i) => (
-                <label key={i} className="flex items-start gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={declarations[i]}
-                    onChange={e => {
-                      setDeclarations(prev => prev.map((v, j) => (j === i ? e.target.checked : v)));
-                      setFormError('');
-                    }}
-                    className="mt-0.5 w-4 h-4 accent-amber-600 shrink-0"
-                  />
-                  <span>{d}</span>
-                </label>
-              ))}
-              <label className="flex items-start gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer pt-2 border-t border-slate-200 dark:border-slate-700">
-                <input type="checkbox" checked={signedBy} onChange={e => {
-                    setSignedBy(e.target.checked);
-                    setFormError('');
-                  }} className="mt-0.5 w-4 h-4 accent-amber-600 shrink-0" />
-                <span>The student and parent/guardian have read and agreed to the above. They will sign the printed form.</span>
-              </label>
-            </section>
+            <DeclarationChecklist
+              checked={decl.checked}
+              agreed={decl.agreed}
+              onChange={(c, a) => {
+                decl.setChecked(c);
+                decl.setAgreed(a);
+                setFormError('');
+              }}
+            />
 
             {formError && (
               <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg text-rose-700 dark:text-rose-300 text-xs">
@@ -426,29 +235,12 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
               <button
                 type="button"
                 onClick={() => {
-                  const missing = [
-                    !studentName.trim() && 'name of the student',
-                    !guardianName.trim() && 'father / husband name',
-                    !dateOfBirth && 'date of birth',
-                    !phone.trim() && 'contact number'
-                  ].filter(Boolean);
-                  if (missing.length) {
-                    setFormError(`Please fill in: ${missing.join(', ')}.`);
+                  const err = validateAdmissionForm(form, { batches, requireBatch: true });
+                  if (err) {
+                    setFormError(err);
                     return;
                   }
-                  if (phone.replace(/\D/g, '').length < 10) {
-                    setFormError('Enter a valid 10-digit contact number.');
-                    return;
-                  }
-                  if (!selectedBatchObj) {
-                    setFormError('This course has no batch to join yet. Create a batch first.');
-                    return;
-                  }
-                  if (selectedBatchObj.enrolledCount >= selectedBatchObj.maxCapacity) {
-                    setFormError(`${selectedBatchObj.name} is full. Choose another batch.`);
-                    return;
-                  }
-                  if (!declarations.every(Boolean) || !signedBy) {
+                  if (!decl.complete) {
                     setFormError('Tick all declarations to continue.');
                     return;
                   }
@@ -748,7 +540,7 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
             </div>
           </div>
         )}
-      {showForm && paymentSuccessData && <AdmissionFormPrint student={paymentSuccessData.student} onClose={() => setShowForm(false)} />}
+      {showForm && paymentSuccessData && <AdmissionFormPrint form={printableFromStudent(paymentSuccessData.student)} onClose={() => setShowForm(false)} />}
     </Modal>
   );
 };

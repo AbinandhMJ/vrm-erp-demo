@@ -25,7 +25,9 @@ import {
   UserAccount,
   UserProfile,
   UserRole,
-  DailyQuizAttempt
+  DailyQuizAttempt,
+  AdmissionFormValues,
+  OnlineApplication
 } from '../types';
 import {
   INITIAL_ANNOUNCEMENTS,
@@ -140,6 +142,10 @@ interface AppContextType {
   updateLeadStatus: (leadId: string, status: LeadStatus, notes?: string) => void;
   addFollowUp: (leadId: string, notes: string, nextDate?: string, statusUpdate?: LeadStatus) => void;
   convertLeadToAdmission: (data: AdmissionInput) => { student: Student; receipt: PaymentReceipt; credentials: Credentials };
+  /** Public online admission form: creates (or updates) a CRM lead carrying the full application. */
+  submitOnlineApplication: (values: AdmissionFormValues) => { lead: Lead; applicationNumber: string; updatedExisting: boolean };
+  /** Edit an admitted student's admission-form details (name, contacts and form fields). */
+  updateStudentForm: (studentId: string, values: AdmissionFormValues) => void;
   addCourse: (course: Omit<Course, 'id' | 'activeBatchesCount'>) => void;
   addBatch: (batch: Omit<Batch, 'id' | 'enrolledCount'>) => void;
   recordBatchAttendance: (
@@ -708,6 +714,108 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { student: { ...newStudent, paidFee: advance, balanceFee: netFee - advance }, receipt, credentials };
   };
 
+  const submitOnlineApplication: AppContextType['submitOnlineApplication'] = values => {
+    const course = coursesRaw.find(c => c.id === values.courseId);
+    const applicationNumber = nextSequence(
+      leads.filter(l => l.application).map(l => l.application!.applicationNumber),
+      'APP-2026-',
+      4
+    );
+    const now = new Date().toISOString();
+    const application: OnlineApplication = {
+      applicationNumber,
+      submittedAt: now,
+      courseId: values.courseId,
+      preferredBatchId: values.batchId || undefined,
+      courseDetails: values.courseDetails.trim(),
+      qualification: values.qualification.trim(),
+      guardianName: values.guardianName.trim(),
+      occupation: values.occupation.trim(),
+      dateOfBirth: values.dateOfBirth,
+      guardianPhone: values.guardianPhone.trim(),
+      specialCategory: values.specialCategory.trim() || 'None',
+      examsAttended: values.examsAttended.trim(),
+      address: values.address.trim(),
+      aim: values.aim.trim(),
+      reference: values.reference.trim(),
+      photo: values.photo || undefined,
+      declarationAcceptedAt: now
+    };
+    const digits = values.phone.replace(/\D/g, '').slice(-10);
+    const existing = leads.find(l => l.phone.replace(/\D/g, '').slice(-10) === digits && l.status !== 'dropped' && l.status !== 'converted');
+    const note = {
+      id: `fu-${Date.now()}`,
+      timestamp: now,
+      counselorName: 'Online admission form',
+      notes: `Submitted online admission form ${applicationNumber}.`,
+      statusUpdate: (existing?.status || 'new') as LeadStatus
+    };
+    if (existing) {
+      const updated: Lead = {
+        ...existing,
+        studentName: values.studentName.trim(),
+        email: values.email.trim() || existing.email,
+        targetCourse: course?.name || existing.targetCourse,
+        location: values.address.trim() || existing.location,
+        application,
+        followUps: [...existing.followUps, note]
+      };
+      setLeads(prev => prev.map(l => (l.id === existing.id ? updated : l)));
+      return { lead: updated, applicationNumber, updatedExisting: true };
+    }
+    const counselor = pickCounselor(course?.name || '');
+    const lead: Lead = {
+      id: `lead-${Date.now()}`,
+      studentName: values.studentName.trim(),
+      phone: values.phone.trim(),
+      email: values.email.trim(),
+      targetExamYear: String(new Date().getFullYear() + 1),
+      targetCourse: course?.name || '',
+      source: 'website',
+      status: 'new',
+      assignedCounselorId: counselor.id,
+      assignedCounselorName: counselor.name,
+      createdAt: now,
+      location: values.address.trim(),
+      notes: `Online admission form ${applicationNumber}. Aim: ${values.aim.trim() || 'not stated'}.`,
+      application,
+      followUps: [note]
+    };
+    setLeads(prev => [lead, ...prev]);
+    return { lead, applicationNumber, updatedExisting: false };
+  };
+
+  const updateStudentForm: AppContextType['updateStudentForm'] = (studentId, v) => {
+    setStudents(prev =>
+      prev.map(s =>
+        s.id !== studentId
+          ? s
+          : {
+              ...s,
+              name: v.studentName.trim(),
+              phone: v.phone.trim(),
+              email: v.email.trim(),
+              address: v.address.trim(),
+              guardianName: v.guardianName.trim(),
+              guardianPhone: v.guardianPhone.trim() || v.phone.trim(),
+              qualification: v.qualification.trim(),
+              occupation: v.occupation.trim(),
+              dateOfBirth: v.dateOfBirth,
+              examsAttended: v.examsAttended.trim(),
+              specialCategory: v.specialCategory.trim() || 'None',
+              aim: v.aim.trim(),
+              reference: v.reference.trim(),
+              courseDetails: v.courseDetails.trim(),
+              photo: v.photo || undefined
+            }
+      )
+    );
+    // Keep the login account's display details in step (username/password unchanged).
+    setAccounts(prev =>
+      prev.map(a => (a.linkedStudentId === studentId ? { ...a, name: v.studentName.trim(), phone: v.phone.trim(), email: v.email.trim() } : a))
+    );
+  };
+
   const addCourse = (courseData: Omit<Course, 'id' | 'activeBatchesCount'>) => {
     setCourses(prev => [...prev, { ...courseData, id: `crs-${Date.now()}`, activeBatchesCount: 0 }]);
   };
@@ -1057,6 +1165,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateLeadStatus,
         addFollowUp,
         convertLeadToAdmission,
+        submitOnlineApplication,
+        updateStudentForm,
         addCourse,
         addBatch,
         recordBatchAttendance,

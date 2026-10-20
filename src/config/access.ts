@@ -3,6 +3,7 @@ import { UserRole } from '../types';
 /** Single source of truth for which role can open which module. Used by the sidebar AND the router. */
 export const TAB_ACCESS: Record<string, UserRole[]> = {
   crm: ['management', 'office_staff', 'field_agent'],
+  forms: ['management', 'office_staff'],
   students: ['management', 'office_staff', 'faculty'],
   academics: ['management', 'office_staff', 'faculty'],
   timetable: ['management', 'office_staff', 'faculty', 'student'],

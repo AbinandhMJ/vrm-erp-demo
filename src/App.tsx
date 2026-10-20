@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
@@ -19,6 +19,8 @@ import { StudentPortal } from './components/portals/StudentPortal';
 import { FacultyPortal } from './components/portals/FacultyPortal';
 import { AdmissionModal } from './components/admissions/AdmissionModal';
 import { ReceiptModal } from './components/common/ReceiptModal';
+import { ApplyPage } from './components/apply/ApplyPage';
+import { AdmissionForms } from './components/admissions/AdmissionForms';
 
 const MainLayout: React.FC = () => {
   const {
@@ -44,6 +46,8 @@ const MainLayout: React.FC = () => {
     switch (activeTab) {
       case 'crm':
         return <CrmDashboard />;
+      case 'forms':
+        return <AdmissionForms />;
       case 'students':
         return <StudentManagement />;
       case 'academics':
@@ -138,8 +142,24 @@ const MainLayout: React.FC = () => {
   );
 };
 
+/** Tiny hash router: /#/apply is the public online admission form; everything else is the app. */
+const useHashRoute = () => {
+  const [hash, setHash] = useState(() => window.location.hash);
+  useEffect(() => {
+    const on = () => setHash(window.location.hash);
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, []);
+  return hash;
+};
+
 const RootApp: React.FC = () => {
   const { isAuthenticated } = useApp();
+  const hash = useHashRoute();
+
+  if (hash.startsWith('#/apply')) {
+    return <ApplyPage />;
+  }
 
   if (!isAuthenticated) {
     return <LoginView />;

@@ -47,6 +47,11 @@ Students you enroll log in with their roll number (first one is `VRM-2026-001`) 
 5. **Office** → Fee Management → *Overdue* → collect a part payment; the balance and status update.
 6. **Management** → Executive Dashboard: collections, admissions, attendance, test trends, counselor efficiency.
 
+**Online application:** applicants fill the same admission form at `/#/apply` (no login; linked from the login
+page, and Office can copy the link to put on the academy website). Each application gets a number (APP-2026-0001),
+lands in the CRM as a lead assigned to a counselor, and shows up in **Admission Forms**, where Office admits it with
+everything pre-filled. Admission Forms also lists every admitted student's form to view, print or correct.
+
 Students also get a **daily 2-question quiz** on their dashboard (same questions for everyone, rotating daily
 from the question bank); faculty see how many in each batch answered today.
 
@@ -60,6 +65,9 @@ Use the ↺ menu in the header to load sample data or clear everything.
   class attendance, test attempts, leads, staff attendance and payroll, all dated relative to today.
 - `src/context/AppContext.tsx`: state + actions. Attendance %, fee balances, test averages, seat counts and
   counselor KPIs are **derived** from the records, never stored, so every screen stays consistent.
+- `public/vrm-logo.jpg`, `public/vrm-wordmark.jpg`: VRM's logo and badge (also used on printed documents).
+- `src/components/admissions/AdmissionFormFields.tsx`: the admission form used by the admission popup, the online
+  application page and the edit screen; `AdmissionFormPrint.tsx` prints it on VRM's letterhead.
 - `src/config/academy.ts`: academy name, address, phone, email and declaration text (from VRM's admission form);
   used on receipts, statements, reports and the printed admission form.
 - `src/config/access.ts`: which role can open which module (used by both the sidebar and the router).

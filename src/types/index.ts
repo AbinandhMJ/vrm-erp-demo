@@ -53,6 +53,8 @@ export interface Lead {
   consultationDate?: string;
   notes?: string;
   followUps: FollowUpLog[];
+  /** Present when the enquiry came through the public online admission form. */
+  application?: OnlineApplication;
   convertedStudentId?: string;
   convertedAt?: string;
   fieldAgentName?: string;
@@ -375,4 +377,46 @@ export interface DailyQuizAttempt {
   answers: Record<string, number>;
   correct: number;
   total: number;
+}
+
+/** The academy's admission form as filled in online by an applicant (before admission). */
+export interface OnlineApplication {
+  applicationNumber: string; // e.g. APP-2026-0001
+  submittedAt: string; // ISO timestamp
+  courseId: string;
+  preferredBatchId?: string;
+  courseDetails?: string;
+  qualification?: string;
+  guardianName: string;
+  occupation?: string;
+  dateOfBirth: string;
+  guardianPhone?: string;
+  specialCategory?: string;
+  examsAttended?: string;
+  address?: string;
+  aim?: string;
+  reference?: string;
+  photo?: string;
+  declarationAcceptedAt: string;
+}
+
+/** The admission form's fields as edited on screen (admission popup, online application, edit form). */
+export interface AdmissionFormValues {
+  courseId: string;
+  batchId: string;
+  courseDetails: string;
+  studentName: string;
+  qualification: string;
+  guardianName: string; // Father / Husband name
+  occupation: string;
+  dateOfBirth: string;
+  phone: string;
+  email: string;
+  guardianPhone: string;
+  specialCategory: string;
+  examsAttended: string;
+  address: string;
+  aim: string;
+  reference: string;
+  photo: string;
 }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Lead, ScholarshipType, PaymentPlanType } from '../../types';
+import { Lead, ScholarshipType, PaymentPlanType, PaymentReceipt } from '../../types';
+import { computeDiscount } from '../../lib/fees';
 import {
   X,
   UserCheck,
@@ -32,8 +33,9 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
   const [phone, setPhone] = useState(initialLead?.phone || '');
   const [email, setEmail] = useState(initialLead?.email || '');
   const [gender, setGender] = useState('Male');
-  const [address, setAddress] = useState(initialLead?.location || 'Anna Nagar, Chennai');
-  const [guardianName, setGuardianName] = useState('Guardian / Parent');
+  const [address, setAddress] = useState(initialLead?.location || '');
+  const [guardianName, setGuardianName] = useState('');
+  const [formError, setFormError] = useState('');
   const [guardianPhone, setGuardianPhone] = useState(initialLead?.phone || '');
 
   // Course & Batch
@@ -41,34 +43,25 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
   const [selectedCourseId, setSelectedCourseId] = useState(defaultCourse?.id || courses[0]?.id || '');
   
   const courseBatches = batches.filter(b => b.courseId === selectedCourseId);
-  const [selectedBatchId, setSelectedBatchId] = useState(courseBatches[0]?.id || batches[0]?.id || '');
+  const firstOpen = (list: typeof batches) => list.find(b => b.enrolledCount < b.maxCapacity) || list[0];
+  const [selectedBatchId, setSelectedBatchId] = useState(firstOpen(courseBatches)?.id || '');
 
   useEffect(() => {
-    const validBatches = batches.filter(b => b.courseId === selectedCourseId);
-    if (validBatches.length > 0) {
-      setSelectedBatchId(validBatches[0].id);
-    }
-  }, [selectedCourseId, batches]);
+    // Only reset the batch when the course changes (not when seat counts update after admission).
+    setSelectedBatchId(firstOpen(batches.filter(b => b.courseId === selectedCourseId))?.id || '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCourseId]);
 
   // Fee & Scholarship
   const currentCourse = courses.find(c => c.id === selectedCourseId) || courses[0];
   const baseFee = currentCourse?.totalFee || 135000;
 
-  const [scholarship, setScholarship] = useState<ScholarshipType>('merit_25');
+  const [scholarship, setScholarship] = useState<ScholarshipType>('none');
   const [customDiscount, setCustomDiscount] = useState<number>(15000);
   const [paymentPlan, setPaymentPlan] = useState<PaymentPlanType>('two_installments');
   const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'Credit/Debit Card' | 'NetBanking' | 'Demand Draft' | 'Cash'>('UPI');
   
-  let calculatedDiscount = 0;
-  if (scholarship === 'merit_25') {
-    calculatedDiscount = Math.round(baseFee * 0.25);
-  } else if (scholarship === 'ews_rural_40') {
-    calculatedDiscount = Math.round(baseFee * 0.40);
-  } else if (scholarship === 'full_lump_sum_10') {
-    calculatedDiscount = Math.round(baseFee * 0.10);
-  } else if (scholarship === 'custom') {
-    calculatedDiscount = customDiscount;
-  }
+  const calculatedDiscount = computeDiscount(baseFee, scholarship, customDiscount);
 
   const netFee = Math.max(0, baseFee - calculatedDiscount);
   
@@ -90,19 +83,31 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
     studentRoll: string;
     studentName: string;
     receiptId: string;
-    receiptObj: any;
+    receiptObj: PaymentReceipt;
+    password: string;
+    phone: string;
   } | null>(null);
 
   const handleProcessAdmission = () => {
-    if (!studentName || !phone || !email) {
-      alert('Please fill out student full name, phone number and email.');
+    if (!studentName.trim() || !phone.trim() || !email.trim()) {
+      setFormError('Please fill in the student name, phone number and email.');
       return;
     }
-
+    if (!advanceAmount || advanceAmount <= 0) {
+      setFormError('Enter the advance amount being collected now.');
+      return;
+    }
+    if (advanceAmount > netFee) {
+      setFormError(`Advance cannot exceed the net fee of ₹${netFee.toLocaleString('en-IN')}.`);
+      return;
+    }
+    setFormError('');
     setIsProcessing(true);
 
     setTimeout(() => {
-      const result = convertLeadToAdmission({
+      let result;
+      try {
+        result = convertLeadToAdmission({
         leadId: initialLead?.id,
         studentName,
         email,
@@ -119,14 +124,21 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
         paymentMethod,
         advancePaymentAmount: Number(advanceAmount),
         transactionRef: `GATEWAY-${paymentMethod.replace(/[^a-zA-Z]/g, '')}-${Date.now().toString().slice(-6)}`
-      });
+        });
+      } catch (err) {
+        setIsProcessing(false);
+        setFormError(err instanceof Error ? err.message : 'Admission failed.');
+        return;
+      }
 
       setIsProcessing(false);
       setPaymentSuccessData({
         studentRoll: result.student.rollNumber,
         studentName: result.student.name,
         receiptId: result.receipt.receiptNumber,
-        receiptObj: result.receipt
+        receiptObj: result.receipt,
+        password: result.credentials.password,
+        phone: result.student.phone
       });
       setStep(3);
     }, 1200);
@@ -316,11 +328,15 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
                     className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
                   >
                     {courseBatches.length > 0 ? (
-                      courseBatches.map(b => (
-                        <option key={b.id} value={b.id}>
-                          {b.name} ({b.timing} - {b.room})
-                        </option>
-                      ))
+                      courseBatches.map(b => {
+                        const full = b.enrolledCount >= b.maxCapacity;
+                        return (
+                          <option key={b.id} value={b.id} disabled={full}>
+                            {full ? '[FULL] ' : ''}
+                            {b.name} ({b.timing})
+                          </option>
+                        );
+                      })
                     ) : (
                       <option value="">No active batches for this course</option>
                     )}
@@ -337,6 +353,11 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
               </div>
             </div>
 
+            {formError && (
+              <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg text-rose-700 dark:text-rose-300 text-xs">
+                {formError}
+              </div>
+            )}
             <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
               <button
                 type="button"
@@ -348,10 +369,19 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
               <button
                 type="button"
                 onClick={() => {
-                  if (!studentName || !phone || !email) {
-                    alert('Please provide student name, phone and email');
+                  if (!studentName.trim() || !phone.trim() || !email.trim()) {
+                    setFormError('Please provide the student name, phone and email.');
                     return;
                   }
+                  if (!selectedBatchObj) {
+                    setFormError('This course has no batch to join yet. Create a batch first.');
+                    return;
+                  }
+                  if (selectedBatchObj.enrolledCount >= selectedBatchObj.maxCapacity) {
+                    setFormError(`${selectedBatchObj.name} is full. Choose another batch.`);
+                    return;
+                  }
+                  setFormError('');
                   setStep(2);
                 }}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg transition-colors"
@@ -496,7 +526,7 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
                     Automated Secure Payment Gateway
                   </span>
                 </div>
-                <span className="text-[11px] text-slate-400">256-Bit SSL Encrypted</span>
+                <span className="text-[11px] text-slate-400">Demo mode: no real payment</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -509,7 +539,7 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
                     value={advanceAmount}
                     onChange={e => setAdvanceAmount(Number(e.target.value))}
                     max={netFee}
-                    min={1000}
+                    min={1}
                     className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg font-mono font-bold tabular-nums"
                   />
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
@@ -536,6 +566,11 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
               </div>
             </div>
 
+            {formError && (
+              <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg text-rose-700 dark:text-rose-300 text-xs">
+                {formError}
+              </div>
+            )}
             {/* Step 2 Actions */}
             <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
               <button
@@ -581,7 +616,7 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
                 Admission Enrolled Successfully!
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
-                Student has been automatically added to the batch roster, user portal credentials have been provisioned, and transaction recorded in the financial ledger.
+                The student is on the batch roster, their installment invoices are created, and a portal login has been set up.
               </p>
             </div>
 
@@ -598,10 +633,17 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
                 <span className="text-slate-500 dark:text-slate-400 font-medium">Digital Receipt ID:</span>
                 <span className="font-mono text-slate-700 dark:text-slate-300">{paymentSuccessData.receiptId}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 dark:text-slate-400 font-medium">Portal Login ID:</span>
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Portal Username:</span>
                 <span className="font-mono text-emerald-700 dark:text-emerald-400 font-semibold">{paymentSuccessData.studentRoll}</span>
               </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Portal Password:</span>
+                <span className="font-mono text-emerald-700 dark:text-emerald-400 font-semibold">{paymentSuccessData.password}</span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 pt-1">
+                Login details sent by SMS to {paymentSuccessData.phone} (simulated in this demo). Sign out and log in with them to see the student's portal.
+              </p>
             </div>
 
             <div className="flex items-center justify-center gap-3 pt-2">

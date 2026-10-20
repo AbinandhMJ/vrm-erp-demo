@@ -1,5 +1,6 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
+import { canAccess } from '../../config/access';
 import {
   Users,
   GraduationCap,
@@ -34,11 +35,11 @@ export const Sidebar: React.FC = () => {
     leads,
     invoices,
     tickets,
-    examAlerts
+    visibleExamAlerts: examAlerts
   } = useApp();
 
-  const newLeadsCount = leads.filter(l => l.status === 'new' || l.status === 'ready_to_join').length;
-  const pendingInvoicesCount = invoices.filter(i => i.status === 'pending').length;
+  const newLeadsCount = leads.filter(l => l.status === 'new').length;
+  const pendingInvoicesCount = invoices.filter(i => i.status === 'overdue').length;
   const openTicketsCount = tickets.filter(t => t.status === 'open').length;
   const activeAlertsCount = examAlerts.filter(a => a.status === 'active').length;
 
@@ -47,97 +48,83 @@ export const Sidebar: React.FC = () => {
       id: 'crm',
       label: 'Admissions & CRM',
       icon: <Users className="w-4 h-4 shrink-0" />,
-      badge: newLeadsCount > 0 ? newLeadsCount : undefined,
-      roles: ['management', 'office_staff', 'field_agent']
+      badge: newLeadsCount > 0 ? newLeadsCount : undefined
     },
     {
       id: 'students',
       label: 'Student Directory',
-      icon: <GraduationCap className="w-4 h-4 shrink-0" />,
-      roles: ['management', 'office_staff', 'faculty']
+      icon: <GraduationCap className="w-4 h-4 shrink-0" />
     },
     {
       id: 'academics',
       label: 'Courses & Batches',
-      icon: <Layers className="w-4 h-4 shrink-0" />,
-      roles: ['management', 'office_staff', 'faculty']
+      icon: <Layers className="w-4 h-4 shrink-0" />
     },
     {
       id: 'timetable',
       label: 'Class Schedules',
-      icon: <Calendar className="w-4 h-4 shrink-0" />,
-      roles: ['management', 'office_staff', 'faculty', 'student']
+      icon: <Calendar className="w-4 h-4 shrink-0" />
     },
     {
       id: 'materials',
       label: 'Learning Materials',
-      icon: <BookOpen className="w-4 h-4 shrink-0" />,
-      roles: ['management', 'office_staff', 'faculty', 'student']
+      icon: <BookOpen className="w-4 h-4 shrink-0" />
     },
     {
       id: 'tests',
       label: 'Tests & Assessments',
-      icon: <ClipboardCheck className="w-4 h-4 shrink-0" />,
-      roles: ['management', 'office_staff', 'faculty', 'student']
+      icon: <ClipboardCheck className="w-4 h-4 shrink-0" />
     },
     {
       id: 'fees',
       label: 'Fee Management',
       icon: <CreditCard className="w-4 h-4 shrink-0" />,
-      badge: pendingInvoicesCount > 0 ? pendingInvoicesCount : undefined,
-      roles: ['management', 'office_staff']
+      badge: pendingInvoicesCount > 0 ? pendingInvoicesCount : undefined
     },
     {
       id: 'reports',
       label: 'Progress Reports',
-      icon: <FileText className="w-4 h-4 shrink-0" />,
-      roles: ['management', 'office_staff']
+      icon: <FileText className="w-4 h-4 shrink-0" />
     },
     {
       id: 'communication',
       label: 'Govt Exam Alerts',
       icon: <BellRing className="w-4 h-4 shrink-0" />,
-      badge: activeAlertsCount > 0 ? activeAlertsCount : undefined,
-      roles: ['management', 'office_staff', 'faculty', 'student', 'field_agent']
+      badge: activeAlertsCount > 0 ? activeAlertsCount : undefined
     },
     {
       id: 'admin',
       label: 'Staff Administration',
-      icon: <Building2 className="w-4 h-4 shrink-0" />,
-      roles: ['management']
+      icon: <Building2 className="w-4 h-4 shrink-0" />
     },
     {
       id: 'analytics',
       label: 'Executive Analytics',
-      icon: <BarChart3 className="w-4 h-4 shrink-0" />,
-      roles: ['management']
+      icon: <BarChart3 className="w-4 h-4 shrink-0" />
     },
     {
       id: 'support',
       label: 'Help Desk & Tickets',
       icon: <LifeBuoy className="w-4 h-4 shrink-0" />,
-      badge: openTicketsCount > 0 ? openTicketsCount : undefined,
-      roles: ['management', 'office_staff', 'faculty', 'student', 'field_agent']
+      badge: openTicketsCount > 0 ? openTicketsCount : undefined
     }
   ];
 
   const portalItems = [
     {
       id: 'student_portal',
-      label: 'My Student Portal',
-      icon: <GraduationCap className="w-4 h-4 text-amber-500 shrink-0" />,
-      roles: ['student', 'management']
+      label: role === 'student' ? 'My Student Portal' : 'Student Portal (View As)',
+      icon: <GraduationCap className="w-4 h-4 text-amber-500 shrink-0" />
     },
     {
       id: 'faculty_portal',
-      label: 'Faculty Attendance & Batches',
-      icon: <UserCheck className="w-4 h-4 text-emerald-500 shrink-0" />,
-      roles: ['faculty', 'management']
+      label: role === 'faculty' ? 'My Classes & Attendance' : 'Faculty Portal (View As)',
+      icon: <UserCheck className="w-4 h-4 text-emerald-500 shrink-0" />
     }
   ];
 
-  const visibleNavItems = mainNavItems.filter(item => item.roles.includes(role));
-  const visiblePortalItems = portalItems.filter(item => item.roles.includes(role));
+  const visibleNavItems = mainNavItems.filter(item => canAccess(role, item.id));
+  const visiblePortalItems = portalItems.filter(item => canAccess(role, item.id));
 
   const sidebarContent = (
     <div className="flex flex-col justify-between h-full py-4 overflow-y-auto">
@@ -283,7 +270,7 @@ export const Sidebar: React.FC = () => {
             <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <img
-                  src="/src/assets/images/vrm_academy_emblem_1792414585733.jpg"
+                  src="/vrm-emblem.jpg"
                   alt="VRM IAS Academy Crest"
                   className="w-8 h-8 rounded-full object-cover border border-amber-300 dark:border-amber-500/40"
                 />

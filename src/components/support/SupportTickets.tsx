@@ -37,7 +37,14 @@ export const SupportTickets: React.FC = () => {
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<SupportTicket['priority']>('medium');
 
-  const filteredTickets = tickets.filter(t => {
+  // Students and counselors see their own tickets; faculty also see test-evaluation queries; office/management see all.
+  const scopedTickets = tickets.filter(t => {
+    if (role === 'management' || role === 'office_staff') return true;
+    if (t.studentOrStaffId === currentUser.id) return true;
+    return role === 'faculty' && t.category === 'Test Evaluation';
+  });
+
+  const filteredTickets = scopedTickets.filter(t => {
     const matchesSearch =
       t.ticketNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||

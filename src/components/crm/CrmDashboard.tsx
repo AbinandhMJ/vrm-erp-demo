@@ -29,8 +29,16 @@ export const CrmDashboard: React.FC = () => {
     updateLeadStatus,
     addFollowUp,
     courses,
-    role
+    role,
+    currentAccount,
+    today
   } = useApp();
+
+  // Field agents / counselors work their own queue; office and management see every lead.
+  const myCounselorId = role === 'field_agent' ? currentAccount?.linkedCounselorId : undefined;
+  const scopedLeads = myCounselorId ? leads.filter(l => l.assignedCounselorId === myCounselorId) : leads;
+  const canAdmit = role === 'management' || role === 'office_staff';
+  const [visibleCount, setVisibleCount] = useState(40);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -46,10 +54,12 @@ export const CrmDashboard: React.FC = () => {
   const [newLeadName, setNewLeadName] = useState('');
   const [newLeadPhone, setNewLeadPhone] = useState('');
   const [newLeadEmail, setNewLeadEmail] = useState('');
-  const [newLeadTargetYear, setNewLeadTargetYear] = useState('2026');
+  const [newLeadTargetYear, setNewLeadTargetYear] = useState(String(new Date().getFullYear() + 1));
   const [newLeadCourse, setNewLeadCourse] = useState(courses[0]?.name || 'UPSC CSE 2026 GS Foundation');
   const [newLeadSource, setNewLeadSource] = useState<LeadSource>('website');
-  const [newLeadLocation, setNewLeadLocation] = useState('Chennai');
+  const [newLeadLocation, setNewLeadLocation] = useState('');
+  const [leadError, setLeadError] = useState('');
+  const [lastAssigned, setLastAssigned] = useState('');
   const [newLeadNotes, setNewLeadNotes] = useState('');
 
   // Form states for Follow-up Logger
@@ -57,42 +67,82 @@ export const CrmDashboard: React.FC = () => {
   const [followUpDate, setFollowUpDate] = useState('');
   const [followUpStatus, setFollowUpStatus] = useState<LeadStatus>('consultation_scheduled');
 
-  const filteredLeads = leads.filter(lead => {
+  const latestNextDate = (l: Lead) => [...l.followUps].reverse().find(f => f.nextFollowUpDate)?.nextFollowUpDate;
+  const isOpen = (l: Lead) => l.status !== 'converted' && l.status !== 'dropped';
+  const isFollowUpDue = (l: Lead) => {
+    if (!isOpen(l)) return false;
+    if (l.status === 'new') return true; // not yet contacted
+    const next = latestNextDate(l);
+    return !!next && next <= today;
+  };
+
+  const filteredLeads = scopedLeads.filter(lead => {
+    const q = searchQuery.toLowerCase();
     const matchesSearch =
-      lead.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.phone.includes(searchQuery) ||
-      lead.targetCourse.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
+      lead.studentName.toLowerCase().includes(q) ||
+      lead.phone.replace(/\s/g, '').includes(q.replace(/\s/g, '')) ||
+      lead.targetCourse.toLowerCase().includes(q);
+
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'open' ? isOpen(lead) : statusFilter === 'due' ? isFollowUpDue(lead) : lead.status === statusFilter);
     const matchesSource = sourceFilter === 'all' || lead.source === sourceFilter;
 
     return matchesSearch && matchesStatus && matchesSource;
   });
 
-  const totalLeads = leads.length;
-  const convertedLeads = leads.filter(l => l.status === 'converted').length;
-  const conversionRate = totalLeads > 0 ? Math.round((convertedLeads / totalLeads) * 100) : 0;
-  const avgResponseTime = '14.2 min';
-  const readyToJoinCount = leads.filter(l => l.status === 'ready_to_join').length;
+  // KPIs, all computed from the lead records.
+  const thisMonth = today.slice(0, 7);
+  const lastMonthDate = new Date(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 2, 1);
+  const lastMonth = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`;
+  const leadsThisMonth = scopedLeads.filter(l => l.createdAt.slice(0, 7) === thisMonth).length;
+  const leadsLastMonth = scopedLeads.filter(l => l.createdAt.slice(0, 7) === lastMonth).length;
+  const dayOfMonth = Number(today.slice(8, 10));
+  const daysInLastMonth = new Date(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1, 0).getDate();
+  // Compare like-for-like: this month so far vs. last month's pace for the same number of days.
+  const paceChange = leadsLastMonth > 0 ? Math.round(((leadsThisMonth / dayOfMonth) / (leadsLastMonth / daysInLastMonth) - 1) * 100) : 0;
+
+  const responseTimes = scopedLeads
+    .filter(l => l.followUps.length > 0)
+    .map(l => (new Date(l.followUps[0].timestamp).getTime() - new Date(l.createdAt).getTime()) / 60000)
+    .filter(m => m >= 0 && m < 60 * 24 * 3);
+  const avgResponseMinutes = responseTimes.length ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length) : 0;
+  const avgResponseTime = `${avgResponseMinutes} min`;
+
+  const closedLeads = scopedLeads.filter(l => l.status === 'converted' || l.status === 'dropped');
+  const convertedLeads = scopedLeads.filter(l => l.status === 'converted').length;
+  const conversionRate = closedLeads.length > 0 ? Math.round((convertedLeads / closedLeads.length) * 100) : 0;
+  const readyToJoinCount = scopedLeads.filter(l => l.status === 'ready_to_join').length;
+  const followUpsDue = scopedLeads.filter(isFollowUpDue).length;
+  const openLeads = scopedLeads.filter(isOpen).length;
 
   const handleCreateLead = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newLeadName || !newLeadPhone) {
-      alert('Please fill out Name and Phone');
+    if (!newLeadName.trim() || !newLeadPhone.trim()) {
+      setLeadError('Please enter the name and phone number.');
       return;
     }
+    const digits = newLeadPhone.replace(/\D/g, '').slice(-10);
+    const duplicate = leads.find(l => l.phone.replace(/\D/g, '').slice(-10) === digits && l.status !== 'dropped');
+    if (duplicate) {
+      setLeadError(`This number already belongs to ${duplicate.studentName} (assigned to ${duplicate.assignedCounselorName}).`);
+      return;
+    }
+    setLeadError('');
 
-    addLead({
-      studentName: newLeadName,
-      phone: newLeadPhone,
-      email: newLeadEmail || `${newLeadName.toLowerCase().replace(/\s+/g, '')}@example.com`,
+    const created = addLead({
+      studentName: newLeadName.trim(),
+      phone: newLeadPhone.trim(),
+      email: newLeadEmail.trim(),
       targetExamYear: newLeadTargetYear,
       targetCourse: newLeadCourse,
       source: newLeadSource,
       location: newLeadLocation,
       notes: newLeadNotes,
-      fieldAgentName: newLeadSource === 'field_agent' ? 'Deepa Nathan' : undefined
+      fieldAgentName: role === 'field_agent' ? currentAccount?.name : undefined
     });
+    setLastAssigned(`${created.studentName} → assigned to ${created.assignedCounselorName}`);
+    setTimeout(() => setLastAssigned(''), 5000);
 
     setNewLeadName('');
     setNewLeadPhone('');
@@ -151,39 +201,46 @@ export const CrmDashboard: React.FC = () => {
       {/* Counselor Performance & Efficiency KPI Strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">Total Inquiries Logged</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">Enquiries This Month</span>
           <div className="flex items-baseline justify-between mt-1">
-            <span className="text-2xl font-mono font-bold text-slate-900 dark:text-white tabular-nums">{totalLeads}</span>
-            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">+18% this month</span>
+            <span className="text-2xl font-mono font-bold text-slate-900 dark:text-white tabular-nums">{leadsThisMonth}</span>
+            {leadsLastMonth > 0 && (
+              <span className={`text-[11px] font-medium ${paceChange >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                {paceChange >= 0 ? '+' : ''}
+                {paceChange}% vs last month's pace
+              </span>
+            )}
           </div>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Synced across Web, Field & Walk-in</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">{openLeads} open leads in the pipeline</p>
         </div>
 
         <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">Avg Response Latency</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">Avg First Response</span>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-2xl font-mono font-bold text-slate-900 dark:text-white tabular-nums">{avgResponseTime}</span>
-            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">Target &lt; 20 min</span>
+            <span className={`text-[11px] font-medium ${avgResponseMinutes <= 20 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>Target &lt; 20 min</span>
           </div>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Auto-assigned to available counselor</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Enquiry to first counselor call</p>
         </div>
 
         <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">Ready to Enroll</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">Follow-ups Due</span>
           <div className="flex items-baseline justify-between mt-1">
-            <span className="text-2xl font-mono font-bold text-amber-700 dark:text-amber-400 tabular-nums">{readyToJoinCount}</span>
-            <span className="text-[11px] text-amber-800 dark:text-amber-300 font-medium">High Intent</span>
+            <span className="text-2xl font-mono font-bold text-amber-700 dark:text-amber-400 tabular-nums">{followUpsDue}</span>
+            <button onClick={() => setStatusFilter('due')} className="text-[11px] text-amber-800 dark:text-amber-300 font-medium hover:underline">
+              View →
+            </button>
           </div>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Attended demo / awaiting payment</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">{readyToJoinCount} ready to join · new or due today</p>
         </div>
 
         <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">Counselor Conversion Rate</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">Conversion Rate</span>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-2xl font-mono font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{conversionRate}%</span>
             <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">{convertedLeads} admissions</span>
           </div>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Lead to classroom onboarding</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Of closed leads (joined vs dropped)</p>
         </div>
       </div>
 
@@ -193,7 +250,7 @@ export const CrmDashboard: React.FC = () => {
           <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
             Active Counselor Assignment & Response Queues
           </span>
-          <span className="text-xs text-slate-500 dark:text-slate-400">Auto Round-Robin Allocation</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400">New leads go to the least-busy counselor for that course</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {counselors.map(c => (
@@ -201,12 +258,12 @@ export const CrmDashboard: React.FC = () => {
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-slate-900 dark:text-white">{c.name}</span>
                 <span className="text-[11px] font-mono text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">
-                  {c.conversionsThisMonth} converted
+                  {c.conversionsThisMonth} joined this month
                 </span>
               </div>
               <div className="mt-2 flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px]">
                 <span>Active Leads: <b className="text-slate-800 dark:text-slate-200 font-mono">{c.activeLeadsCount}</b></span>
-                <span>Avg Call: <b className="text-slate-800 dark:text-slate-200 font-mono">{c.averageResponseMinutes}m</b></span>
+                <span>Avg Response: <b className="text-slate-800 dark:text-slate-200 font-mono">{c.averageResponseMinutes}m</b></span>
               </div>
             </div>
           ))}
@@ -226,6 +283,11 @@ export const CrmDashboard: React.FC = () => {
             Designed for high-speed offline / mobile data collection during campus awareness programs.
           </p>
 
+          {(leadError || lastAssigned) && (
+            <div className={`mb-3 p-2 rounded-lg text-xs border ${leadError ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300' : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'}`}>
+              {leadError || `Lead saved: ${lastAssigned}`}
+            </div>
+          )}
           <form onSubmit={handleCreateLead} className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <input
               type="text"
@@ -262,6 +324,12 @@ export const CrmDashboard: React.FC = () => {
         </div>
       )}
 
+      {!isMobileFieldMode && lastAssigned && (
+        <div className="p-2.5 rounded-lg text-xs border bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300">
+          Lead saved: {lastAssigned}
+        </div>
+      )}
+
       {/* Search & Status Filters */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 border border-slate-200 dark:border-slate-800 rounded-xl">
         <div className="relative flex-1 max-w-sm">
@@ -278,12 +346,14 @@ export const CrmDashboard: React.FC = () => {
         {/* Status Filter Tabs */}
         <div className="flex items-center gap-1 overflow-x-auto p-1 bg-slate-100 dark:bg-slate-800 rounded-lg shrink-0">
           {[
-            { id: 'all', label: 'All Leads' },
+            { id: 'all', label: 'All' },
+            { id: 'open', label: 'Open' },
+            { id: 'due', label: `Due (${followUpsDue})` },
             { id: 'new', label: 'New' },
-            { id: 'contacted', label: 'Contacted' },
-            { id: 'consultation_scheduled', label: 'Consultation Set' },
+            { id: 'consultation_scheduled', label: 'Consultation' },
             { id: 'ready_to_join', label: 'Ready to Join' },
-            { id: 'converted', label: 'Converted' }
+            { id: 'converted', label: 'Joined' },
+            { id: 'dropped', label: 'Dropped' }
           ].map(tab => (
             <button
               key={tab.id}
@@ -310,6 +380,7 @@ export const CrmDashboard: React.FC = () => {
           <option value="field_agent">Field Agent / Seminars</option>
           <option value="walk_in">Walk-in Center</option>
           <option value="referral">Student Referrals</option>
+          <option value="seminar">Seminars</option>
         </select>
       </div>
 
@@ -335,7 +406,7 @@ export const CrmDashboard: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredLeads.map(lead => {
+                filteredLeads.slice(0, visibleCount).map(lead => {
                   const isConverted = lead.status === 'converted';
                   return (
                     <tr key={lead.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
@@ -391,12 +462,19 @@ export const CrmDashboard: React.FC = () => {
                           <span className="text-slate-700 dark:text-slate-300 font-medium text-xs">
                             Contacted
                           </span>
+                        ) : lead.status === 'demo_attended' ? (
+                          <span className="text-indigo-700 dark:text-indigo-400 font-medium text-xs">Attended Demo</span>
+                        ) : lead.status === 'dropped' ? (
+                          <span className="text-slate-400 font-medium text-xs line-through">Dropped</span>
                         ) : (
                           <span className="text-rose-700 dark:text-rose-400 font-semibold text-xs">
                             New Inbound
                           </span>
                         )}
-                        {lead.consultationDate && (
+                        {isFollowUpDue(lead) && lead.status !== 'new' && (
+                          <div className="text-[10px] text-rose-600 font-semibold mt-0.5">Follow-up due</div>
+                        )}
+                        {lead.consultationDate && isOpen(lead) && (
                           <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
                             Meeting: {new Date(lead.consultationDate).toLocaleDateString('en-IN')}
                           </div>
@@ -404,7 +482,7 @@ export const CrmDashboard: React.FC = () => {
                       </td>
 
                       <td className="px-4 py-3.5 text-right space-x-1.5">
-                        {!isConverted ? (
+                        {isOpen(lead) ? (
                           <>
                             <button
                               onClick={() => {
@@ -418,18 +496,20 @@ export const CrmDashboard: React.FC = () => {
                               <span>Follow-up</span>
                             </button>
 
-                            <button
-                              onClick={() => setSelectedLeadForAdmission(lead)}
-                              className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 rounded-md transition-colors shadow-2xs"
-                              title="Convert to Admission & Generate Receipt"
-                            >
-                              <span>Convert</span>
-                              <ArrowRight className="w-3 h-3" />
-                            </button>
+                            {canAdmit && (
+                              <button
+                                onClick={() => setSelectedLeadForAdmission(lead)}
+                                className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 rounded-md transition-colors shadow-2xs"
+                                title="Convert to Admission & Generate Receipt"
+                              >
+                                <span>Admit</span>
+                                <ArrowRight className="w-3 h-3" />
+                              </button>
+                            )}
                           </>
                         ) : (
                           <span className="text-slate-400 dark:text-slate-500 font-mono text-[11px]">
-                            Student Active
+                            {isConverted ? 'Student Active' : 'Closed'}
                           </span>
                         )}
                       </td>
@@ -440,6 +520,13 @@ export const CrmDashboard: React.FC = () => {
             </tbody>
           </table>
         </div>
+        {filteredLeads.length > visibleCount && (
+          <div className="p-3 text-center border-t border-slate-100 dark:border-slate-800">
+            <button onClick={() => setVisibleCount(v => v + 40)} className="text-xs font-semibold text-amber-700 dark:text-amber-400 hover:underline">
+              Show more ({filteredLeads.length - visibleCount} remaining)
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Follow-up Consultation Logger Modal */}
@@ -556,6 +643,9 @@ export const CrmDashboard: React.FC = () => {
             </div>
 
             <form onSubmit={handleCreateLead} className="space-y-3 text-xs">
+              {leadError && (
+                <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300">{leadError}</div>
+              )}
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Candidate Full Name *</label>
                 <input

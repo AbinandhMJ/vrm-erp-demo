@@ -34,8 +34,8 @@ export const Header: React.FC = () => {
     toggleFullscreen,
     openModal,
     notificationCount,
-    examAlerts,
-    announcements,
+    visibleExamAlerts: examAlerts,
+    visibleAnnouncements: announcements,
     resetToDefaultData
   } = useApp();
 
@@ -44,10 +44,10 @@ export const Header: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-40 w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 transition-colors">
-      <div className="flex items-center justify-between gap-4 px-4 sm:px-6 py-2.5">
+      <div className="flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-6 py-2.5">
         
         {/* Left Zone: Mobile Toggle + Sidebar Toggle + Academy Crest & Wordmark */}
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           {/* Mobile Drawer Hamburger */}
           <button
             onClick={() => setMobileMenuOpen(!isMobileMenuOpen)}
@@ -71,14 +71,14 @@ export const Header: React.FC = () => {
           </button>
 
           {/* Academy Crest and Title */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
             <img
-              src="/src/assets/images/vrm_academy_emblem_1792414585733.jpg"
+              src="/vrm-emblem.jpg"
               alt="VRM IAS Academy Crest"
-              className="w-9 h-9 rounded-full object-cover border border-amber-300 dark:border-amber-500/40 shadow-2xs"
+              className="w-9 h-9 shrink-0 rounded-full object-cover border border-amber-300 dark:border-amber-500/40 shadow-2xs"
             />
-            <div className="leading-tight">
-              <span className="text-sm sm:text-base font-bold tracking-tight text-slate-900 dark:text-white block whitespace-nowrap">
+            <div className="leading-tight min-w-0">
+              <span className="text-sm sm:text-base font-bold tracking-tight text-slate-900 dark:text-white block truncate">
                 VRM IAS ACADEMY
               </span>
               <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-slate-400 tracking-wide block whitespace-nowrap">
@@ -98,10 +98,10 @@ export const Header: React.FC = () => {
         </div>
 
         {/* Right Zone: Utility Controls (Theme, Fullscreen, Notifications, Enroll, User Profile) */}
-        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
           
           {/* Enroll Student CTA (Staff & Management only) */}
-          {role !== 'student' && (
+          {(role === 'management' || role === 'office_staff') && (
             <button
               onClick={() => openModal('admission')}
               className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 rounded-lg transition-colors whitespace-nowrap shrink-0 shadow-2xs"
@@ -114,7 +114,7 @@ export const Header: React.FC = () => {
           {/* Fullscreen Toggle */}
           <button
             onClick={toggleFullscreen}
-            className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="hidden sm:inline-flex p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             title={isFullscreen ? 'Exit Full Screen' : 'Go Full Screen'}
           >
             {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
@@ -144,7 +144,7 @@ export const Header: React.FC = () => {
 
             {/* Notification Drawer Popover */}
             {isNotifOpen && (
-              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 p-4 z-50">
+              <div className="fixed sm:absolute left-3 right-3 top-14 sm:top-auto sm:left-auto sm:right-0 mt-2 sm:w-96 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 p-4 z-50">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
                   <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
                     Alerts & Broadcasts ({notificationCount})
@@ -204,7 +204,7 @@ export const Header: React.FC = () => {
               }
             }}
             title="Reset to fresh demo data"
-            className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+            className="hidden sm:inline-flex p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
@@ -213,14 +213,14 @@ export const Header: React.FC = () => {
           <button
             onClick={logout}
             className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors border border-slate-200 dark:border-slate-800 shadow-2xs"
-            title="Sign out and switch to another RBAC role in Mock Login"
+            title="Sign out (pick another demo account on the login screen)"
           >
             <LogOut className="w-3.5 h-3.5 text-rose-500" />
-            <span className="hidden md:inline">Switch Role</span>
+            <span className="hidden md:inline">Sign Out</span>
           </button>
 
           {/* User Profile & Logout Dropdown */}
-          <div className="relative pl-1 sm:pl-2 border-l border-slate-200 dark:border-slate-800">
+          <div className="relative pl-1 sm:pl-2 sm:border-l border-slate-200 dark:border-slate-800">
             <button
               onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
               className="flex items-center gap-2 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -236,7 +236,7 @@ export const Header: React.FC = () => {
                   {currentUser.designation}
                 </span>
               </div>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+              <ChevronDown className="hidden sm:block w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
             </button>
 
             {/* Profile Dropdown Menu */}
@@ -260,12 +260,22 @@ export const Header: React.FC = () => {
                   <button
                     onClick={() => {
                       setIsUserDropdownOpen(false);
+                      if (window.confirm('Reset VRM IAS Academy ERP to original demo data?')) resetToDefaultData();
+                    }}
+                    className="sm:hidden w-full px-4 py-2 text-xs flex items-center gap-2 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left font-medium"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Reset Demo Data</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsUserDropdownOpen(false);
                       logout();
                     }}
                     className="w-full px-4 py-2 text-xs flex items-center gap-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors text-left font-medium"
                   >
                     <LogOut className="w-3.5 h-3.5" />
-                    <span>Switch Role / Sign Out</span>
+                    <span>Sign Out</span>
                   </button>
                 </div>
               </div>

@@ -1,3 +1,4 @@
+import { printLight } from '../../lib/print';
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
@@ -35,17 +36,17 @@ export const ReportingView: React.FC = () => {
     : 0;
 
   const avgScore = filteredStudents.length > 0
-    ? Math.round(filteredStudents.reduce((sum, s) => sum + (s.averageTestScore || 0), 0) / filteredStudents.length * 10) / 10
+    ? Math.round(filteredStudents.filter(s => s.averageTestScore > 0).reduce((sum, s) => sum + s.averageTestScore, 0) / Math.max(1, filteredStudents.filter(s => s.averageTestScore > 0).length) * 10) / 10
     : 0;
 
-  const lowAttendanceStudents = filteredStudents.filter(s => s.attendancePercentage < 80);
+  const lowAttendanceStudents = filteredStudents.filter(s => s.attendancePercentage < 75);
 
   const handlePrint = () => {
-    window.print();
+    printLight();
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 print-area">
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 print:hidden">
@@ -126,7 +127,7 @@ export const ReportingView: React.FC = () => {
         <div className="flex items-start justify-between border-b border-slate-200 pb-6">
           <div className="flex items-center gap-4">
             <img
-              src="/src/assets/images/vrm_academy_emblem_1792414585733.jpg"
+              src="/vrm-emblem.jpg"
               alt="VRM IAS Academy Crest"
               className="w-14 h-14 rounded-full object-cover border border-amber-200 shadow-2xs"
             />
@@ -163,12 +164,12 @@ export const ReportingView: React.FC = () => {
           <div>
             <span className="text-slate-500 block">Mock Test Avg Score</span>
             <span className="text-xl font-mono font-bold text-slate-900 mt-0.5 block tabular-nums">
-              {avgScore} / 20
+              {avgScore}%
             </span>
           </div>
 
           <div>
-            <span className="text-slate-500 block">Attendance Defaulters (&lt;80%)</span>
+            <span className="text-slate-500 block">Below 75% Attendance</span>
             <span className={`text-xl font-mono font-bold mt-0.5 block tabular-nums ${lowAttendanceStudents.length > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
               {lowAttendanceStudents.length} Aspirants
             </span>
@@ -211,12 +212,14 @@ export const ReportingView: React.FC = () => {
                         {student.attendancePercentage}%
                       </td>
                       <td className="px-4 py-3 font-mono tabular-nums font-bold text-slate-900">
-                        {student.averageTestScore > 0 ? `${student.averageTestScore} / 20` : 'Due'}
+                        {student.averageTestScore > 0 ? `${student.averageTestScore}%` : 'No tests'}
                       </td>
                       <td className="px-4 py-3 text-slate-600">
-                        {student.averageTestScore >= 16 ? (
+                        {student.averageTestScore === 0 ? (
+                          <span className="text-slate-400">No tests yet</span>
+                        ) : student.averageTestScore >= 75 ? (
                           <span className="text-emerald-700 font-medium">Interview Ready · High Yield</span>
-                        ) : student.averageTestScore >= 12 ? (
+                        ) : student.averageTestScore >= 50 ? (
                           <span className="text-blue-700 font-medium">Consistent · Moderate</span>
                         ) : (
                           <span className="text-amber-800 font-medium">Needs Answer Writing Booster</span>
@@ -258,7 +261,7 @@ export const ReportingView: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredStudents.map(student => {
-                    const isDefaulter = student.attendancePercentage < 80;
+                    const isDefaulter = student.attendancePercentage < 75;
                     return (
                       <tr key={student.id} className="hover:bg-slate-50/50">
                         <td className="px-4 py-3 font-mono font-semibold text-slate-800">
@@ -273,10 +276,10 @@ export const ReportingView: React.FC = () => {
                         <td className="px-4 py-3">
                           {student.attendancePercentage >= 90 ? (
                             <span className="text-emerald-700 font-semibold">Exemplary (90%+)</span>
-                          ) : student.attendancePercentage >= 80 ? (
-                            <span className="text-blue-700 font-medium">Standard (80–89%)</span>
+                          ) : student.attendancePercentage >= 75 ? (
+                            <span className="text-blue-700 font-medium">Standard (75–89%)</span>
                           ) : (
-                            <span className="text-rose-700 font-bold">Defaulter Risk (&lt;80%)</span>
+                            <span className="text-rose-700 font-bold">Below 75%</span>
                           )}
                         </td>
                         <td className="px-4 py-3 font-mono text-slate-600">

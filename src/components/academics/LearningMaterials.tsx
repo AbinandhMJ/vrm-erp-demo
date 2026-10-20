@@ -24,6 +24,7 @@ export const LearningMaterials: React.FC = () => {
     batches,
     students,
     currentUser,
+    currentStudent,
     role
   } = useApp();
 
@@ -50,11 +51,12 @@ export const LearningMaterials: React.FC = () => {
 
     // If viewing as student, check if it's for all, or their batch, or them directly
     if (role === 'student') {
-      const studentObj = students.find(s => s.name === currentUser.name || s.id === 'stu-01');
-      if (mat.targetScope === 'batch' && mat.targetBatchId && studentObj && mat.targetBatchId !== studentObj.enrolledBatchId) {
+      const studentObj = currentStudent;
+      if (!studentObj) return false;
+      if (mat.targetScope === 'batch' && mat.targetBatchId !== studentObj.enrolledBatchId) {
         return false;
       }
-      if (mat.targetScope === 'individual' && mat.targetStudentId && studentObj && mat.targetStudentId !== studentObj.id) {
+      if (mat.targetScope === 'individual' && mat.targetStudentId !== studentObj.id) {
         return false;
       }
     }

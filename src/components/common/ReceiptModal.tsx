@@ -1,3 +1,4 @@
+import { printLight } from '../../lib/print';
 import React from 'react';
 import { PaymentReceipt } from '../../types';
 import { Printer, Download, X, CheckCircle2, ShieldCheck } from 'lucide-react';
@@ -9,12 +10,12 @@ interface ReceiptModalProps {
 
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose }) => {
   const handlePrint = () => {
-    window.print();
+    printLight();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-8 print:m-0 print:border-none print:shadow-none">
+      <div className="print-area relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-8 print:m-0 print:border-none print:shadow-none">
         
         {/* Action Bar (hidden in print) */}
         <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white print:hidden">
@@ -46,7 +47,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose }) 
           <div className="flex items-start justify-between border-b border-slate-200 pb-6 mb-6">
             <div className="flex items-center gap-4">
               <img
-                src="/src/assets/images/vrm_academy_emblem_1792414585733.jpg"
+                src="/vrm-emblem.jpg"
                 alt="VRM IAS Academy Emblem"
                 className="w-16 h-16 rounded-full object-cover border border-amber-200 shadow-xs"
               />

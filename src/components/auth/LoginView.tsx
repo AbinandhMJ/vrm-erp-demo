@@ -105,14 +105,14 @@ export const LoginView: React.FC = () => {
     { module: 'CRM & Lead Assignment', mgmt: true, office: true, faculty: false, student: false, agent: true },
     { module: 'Walk-in Admission & Fee Plan Gateway', mgmt: true, office: true, faculty: false, student: false, agent: false },
     { module: 'Student Directory & 360 Profile', mgmt: true, office: true, faculty: true, student: false, agent: false },
-    { module: 'Course & Batch Setup', mgmt: true, office: true, faculty: false, student: false, agent: false },
+    { module: 'Course & Batch Setup (faculty: view only)', mgmt: true, office: true, faculty: true, student: false, agent: false },
     { module: 'Class Schedules & Timetable', mgmt: true, office: true, faculty: true, student: true, agent: false },
     { module: 'Learning Material Distribution', mgmt: true, office: true, faculty: true, student: true, agent: false },
     { module: 'Online Quizzes & Auto-Grading Engine', mgmt: true, office: true, faculty: true, student: true, agent: false },
     { module: 'Automated Invoicing & Fee Receipts', mgmt: true, office: true, faculty: false, student: false, agent: false },
     { module: 'Comprehensive Stakeholder Reports', mgmt: true, office: true, faculty: false, student: false, agent: false },
     { module: 'Government Exam Alerts Publishing', mgmt: true, office: true, faculty: false, student: false, agent: false },
-    { module: 'Staff Salary Ledgers & Payouts', mgmt: true, office: false, faculty: false, student: false, agent: false },
+    { module: 'Staff Records, Attendance & Payroll', mgmt: true, office: true, faculty: false, student: false, agent: false },
     { module: 'Real-Time Analytics & Executive KPIs', mgmt: true, office: false, faculty: false, student: false, agent: false },
     { module: 'Troubleshooting & Support Tickets', mgmt: true, office: true, faculty: true, student: true, agent: true }
   ];
@@ -125,13 +125,13 @@ export const LoginView: React.FC = () => {
     }
     const success = login(username, password);
     if (!success) {
-      setErrorMessage('Invalid credentials. Select one of the pre-configured personas below.');
+      setErrorMessage('Incorrect username or password.');
+    } else {
+      setErrorMessage('');
     }
   };
 
   const handleSelectPersona = (p: typeof personas[0]) => {
-    setUsername(p.email);
-    setPassword(p.pass);
     quickLogin(p.role);
   };
 
@@ -142,7 +142,7 @@ export const LoginView: React.FC = () => {
       <header className="flex items-center justify-between px-4 sm:px-8 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xs sticky top-0 z-30">
         <div className="flex items-center gap-3">
           <img
-            src="/src/assets/images/vrm_academy_emblem_1792414585733.jpg"
+            src="/vrm-emblem.jpg"
             alt="VRM IAS Academy Emblem"
             className="w-10 h-10 rounded-full object-cover border border-amber-300 dark:border-amber-500/40 shadow-xs"
           />
@@ -288,7 +288,8 @@ export const LoginView: React.FC = () => {
             </div>
 
             <div className="pt-2 text-[10px] text-slate-400 dark:text-slate-500">
-              Passcodes for demo: <code className="font-mono text-slate-700 dark:text-slate-300">admin123</code>, <code className="font-mono text-slate-700 dark:text-slate-300">office123</code>, <code className="font-mono text-slate-700 dark:text-slate-300">faculty123</code>, <code className="font-mono text-slate-700 dark:text-slate-300">student123</code>
+              Demo passwords: <code className="font-mono text-slate-700 dark:text-slate-300">admin123</code>, <code className="font-mono text-slate-700 dark:text-slate-300">office123</code>, <code className="font-mono text-slate-700 dark:text-slate-300">faculty123</code>, <code className="font-mono text-slate-700 dark:text-slate-300">agent123</code>, <code className="font-mono text-slate-700 dark:text-slate-300">student123</code>.
+              Newly admitted students sign in with their roll number and <code className="font-mono text-slate-700 dark:text-slate-300">VRM@</code> + last 4 digits of their phone.
             </div>
           </div>
         </div>

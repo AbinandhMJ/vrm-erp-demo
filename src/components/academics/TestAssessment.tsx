@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { AssessmentTest, Question, StudentTestAttempt } from '../../types';
+import { formatDate } from '../../lib/dates';
 import {
   ClipboardCheck,
   Clock,
@@ -45,8 +46,17 @@ export const TestAssessment: React.FC = () => {
     submitTestAttempt,
     batches,
     currentUser,
+    currentStudent,
     role
   } = useApp();
+
+  // Students see only tests assigned to their batch and only their own attempts.
+  const visibleTests =
+    role === 'student' ? assessmentTests.filter(t => currentStudent && t.batchIds.includes(currentStudent.enrolledBatchId)) : assessmentTests;
+  const visibleAttempts = (role === 'student' ? studentAttempts.filter(a => a.studentId === currentStudent?.id) : studentAttempts)
+    .slice()
+    .sort((a, b) => b.attemptedAt.localeCompare(a.attemptedAt));
+  const [attemptsShown, setAttemptsShown] = useState(20);
 
   // Primary Workspace Sub-Tabs: 'bank' | 'tests' | 'analytics'
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'bank' | 'tests' | 'analytics'>('bank');
@@ -428,35 +438,51 @@ export const TestAssessment: React.FC = () => {
       }
     });
 
-    const finalScore = Math.max(0, Math.round(totalScore * 100) / 100);
+    const finalScore = Math.round(totalScore * 100) / 100;
     const attemptedCount = correctCount + incorrectCount;
     const accuracy = attemptedCount > 0 ? Math.round((correctCount / attemptedCount) * 100) : 0;
 
-    const attempt = submitTestAttempt({
+    // Topic-wise breakdown and weak areas from the actual answers.
+    const byTopic = new Map<string, { score: number; total: number; wrong: boolean }>();
+    activeTest.questions.forEach(q => {
+      const key = q.topic || q.subject;
+      const t = byTopic.get(key) || { score: 0, total: 0, wrong: false };
+      t.total += q.marks || 2;
+      const choice = selectedAnswers[q.id];
+      if (choice === q.correctOptionIndex) t.score += q.marks || 2;
+      else if (choice !== undefined) {
+        t.score -= q.negativeMarks ?? activeTest.negativeMarksPerWrong ?? 0.66;
+        t.wrong = true;
+      } else t.wrong = true;
+      byTopic.set(key, t);
+    });
+    const weakTopics = [...byTopic.entries()].filter(([, v]) => v.wrong).map(([k]) => k);
+
+    const attemptData = {
       testId: activeTest.id,
       testTitle: activeTest.title,
-      studentId: currentUser.id || 'stu-01',
-      studentName: currentUser.name || 'Aaditya Sharma',
+      studentId: currentStudent?.id || currentUser.id,
+      studentName: currentStudent?.name || currentUser.name,
       score: finalScore,
       totalMarks: activeTest.totalMarks,
       accuracyPercentage: accuracy,
       correctAnswers: correctCount,
       incorrectAnswers: incorrectCount,
       unattempted: unattemptedCount,
-      rankInBatch: Math.floor(Math.random() * 4) + 1,
+      rankInBatch: 0,
       userAnswers: selectedAnswers,
-      subjectBreakdown: [
-        { subject: activeTest.subject, score: finalScore, total: activeTest.totalMarks }
-      ],
-      improvementAreas:
-        incorrectCount > 0
-          ? [
-              'Review negative responses in conceptual question analysis.',
-              'Strengthen recall on multi-statement assertion reasoning.',
-              'Revise NCERT fundamentals and previous year question trends.'
-            ]
-          : ['Outstanding performance! Focus on maintaining speed in comprehensive mocks.']
-    });
+      subjectBreakdown: [...byTopic.entries()].map(([subject, v]) => ({
+        subject,
+        score: Math.round(v.score * 100) / 100,
+        total: v.total
+      })),
+      improvementAreas: weakTopics.map(t => `Revise ${t}: review the explanation for each question you missed.`)
+    };
+
+    // Only students' attempts are recorded; staff can preview a test without affecting results.
+    const attempt = currentStudent
+      ? submitTestAttempt(attemptData)
+      : { ...attemptData, id: `preview-${Date.now()}`, attemptedAt: new Date().toISOString() };
 
     setIsTestRunning(false);
     setCompletedAttempt(attempt);
@@ -908,13 +934,17 @@ export const TestAssessment: React.FC = () => {
               </p>
             </div>
             <span className="text-xs font-mono text-slate-500">
-              {assessmentTests.length} Scheduled
+              {visibleTests.length} Tests
             </span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {assessmentTests.map(test => {
-              const attempt = studentAttempts.find(a => a.testId === test.id);
+            {visibleTests.map(test => {
+              const attempt = role === 'student' ? visibleAttempts.find(a => a.testId === test.id) : undefined;
+              const takers = studentAttempts.filter(a => a.testId === test.id);
+              const avgPct = takers.length
+                ? Math.round((takers.reduce((sum, a) => sum + Math.max(0, a.score) / (a.totalMarks || 1), 0) / takers.length) * 100)
+                : 0;
 
               return (
                 <div
@@ -936,7 +966,7 @@ export const TestAssessment: React.FC = () => {
                         {test.title}
                       </h3>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        Domain: {test.subject} · Scheduled on {test.scheduledDate}
+                        Domain: {test.subject} · {formatDate(test.scheduledDate)}
                       </p>
                     </div>
 
@@ -962,6 +992,10 @@ export const TestAssessment: React.FC = () => {
                         <CheckCircle2 className="w-4 h-4" />
                         <span>Completed: {attempt.score}/{attempt.totalMarks} ({attempt.accuracyPercentage}%)</span>
                       </div>
+                    ) : role !== 'student' ? (
+                      <span className="text-slate-500 text-[11px]">
+                        {takers.length ? `${takers.length} attempts · avg ${avgPct}%` : 'No attempts yet'}
+                      </span>
                     ) : (
                       <span className="text-slate-400 text-[11px]">
                         Negative Marking: -{test.negativeMarksPerWrong} marks
@@ -973,7 +1007,7 @@ export const TestAssessment: React.FC = () => {
                       className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg transition-colors shadow-2xs"
                     >
                       <Play className="w-3.5 h-3.5" />
-                      <span>{attempt ? 'Retake Drill' : 'Start Live Test'}</span>
+                      <span>{role !== 'student' ? 'Preview Test' : attempt ? 'Retake' : 'Start Test'}</span>
                     </button>
                   </div>
                 </div>
@@ -1000,7 +1034,12 @@ export const TestAssessment: React.FC = () => {
           </div>
 
           <div className="space-y-4">
-            {studentAttempts.map(att => (
+            {visibleAttempts.length === 0 && (
+              <div className="p-8 text-center text-xs text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
+                No attempts yet.
+              </div>
+            )}
+            {visibleAttempts.slice(0, attemptsShown).map(att => (
               <div
                 key={att.id}
                 className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-2xs space-y-4"
@@ -1065,6 +1104,14 @@ export const TestAssessment: React.FC = () => {
                 )}
               </div>
             ))}
+            {visibleAttempts.length > attemptsShown && (
+              <button
+                onClick={() => setAttemptsShown(n => n + 20)}
+                className="w-full py-2 text-xs font-semibold text-amber-700 dark:text-amber-400 hover:underline"
+              >
+                Show more ({visibleAttempts.length - attemptsShown} remaining)
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -1899,7 +1946,7 @@ export const TestAssessment: React.FC = () => {
               <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg">
                 <span className="text-amber-700 dark:text-amber-400 block">Batch Rank</span>
                 <span className="text-xl font-mono font-bold text-amber-800 dark:text-amber-300 mt-1 block">
-                  #{completedAttempt.rankInBatch}
+                  {completedAttempt.rankInBatch ? `#${completedAttempt.rankInBatch}` : "Preview"}
                 </span>
               </div>
             </div>

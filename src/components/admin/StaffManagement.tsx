@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { formatDate } from '../../lib/dates';
 import { useApp } from '../../context/AppContext';
 import { StaffMember, SalaryPayout } from '../../types';
 import {
@@ -19,27 +20,53 @@ export const StaffManagement: React.FC = () => {
     staffMembers,
     salaryPayouts,
     addStaffMember,
-    batches
+    batches,
+    staffAttendance,
+    markStaffAttendance,
+    today
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'roster' | 'payroll'>('roster');
+  const [activeTab, setActiveTab] = useState<'roster' | 'attendance' | 'payroll'>('roster');
+  const [createdCreds, setCreatedCreds] = useState<{ name: string; username: string; password: string } | null>(null);
+
+  // Staff attendance marking
+  type StaffMark = 'present' | 'absent' | 'leave';
+  const [attDate, setAttDate] = useState(today);
+  const [attMarks, setAttMarks] = useState<Record<string, StaffMark>>({});
+  const [attSaved, setAttSaved] = useState(false);
+  const activeStaff = staffMembers.filter(s => s.joiningDate <= attDate);
+  useEffect(() => {
+    const marks: Record<string, StaffMark> = {};
+    staffAttendance.filter(a => a.date === attDate).forEach(a => (marks[a.staffId] = a.status));
+    setAttMarks(marks);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attDate]);
+  const alreadyMarked = staffAttendance.some(a => a.date === attDate);
+  const saveStaffAttendance = () => {
+    markStaffAttendance(
+      attDate,
+      activeStaff.map(s => ({ staffId: s.id, status: attMarks[s.id] || 'present' }))
+    );
+    setAttSaved(true);
+    setTimeout(() => setAttSaved(false), 2500);
+  };
   const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
 
   // New Staff Form State
   const [name, setName] = useState('');
-  const [designation, setDesignation] = useState('Faculty - Indian Economy');
+  const [designation, setDesignation] = useState('');
   const [department, setDepartment] = useState<StaffMember['department']>('Faculty');
-  const [subjects, setSubjects] = useState('Indian Economy, Economic Survey');
-  const [phone, setPhone] = useState('+91 98401 99887');
-  const [email, setEmail] = useState('faculty@vrmiasacademy.in');
-  const [monthlySalary, setMonthlySalary] = useState(120000);
-  const [selectedBatchNames, setSelectedBatchNames] = useState([batches[0]?.name || 'Morning Regular Batch']);
+  const [subjects, setSubjects] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [monthlySalary, setMonthlySalary] = useState(60000);
+  const [selectedBatchNames, setSelectedBatchNames] = useState<string[]>([]);
 
   const handleOnboardStaff = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email) return;
+    if (!name.trim() || !email.trim() || !phone.trim()) return;
 
-    addStaffMember({
+    const { credentials } = addStaffMember({
       name,
       designation,
       department,
@@ -48,12 +75,18 @@ export const StaffManagement: React.FC = () => {
       phone,
       email,
       monthlySalary: Number(monthlySalary),
-      joiningDate: new Date().toISOString().split('T')[0],
+      joiningDate: today,
       status: 'active'
     });
 
+    setCreatedCreds({ name, ...credentials });
     setIsOnboardModalOpen(false);
     setName('');
+    setDesignation('');
+    setSubjects('');
+    setPhone('');
+    setEmail('');
+    setSelectedBatchNames([]);
   };
 
   return (
@@ -79,6 +112,18 @@ export const StaffManagement: React.FC = () => {
         </button>
       </div>
 
+      {createdCreds && (
+        <div className="p-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-xs text-emerald-900 dark:text-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <span>
+            <b>{createdCreds.name}</b> is onboarded. Login: <code className="font-mono">{createdCreds.username}</code> / password{' '}
+            <code className="font-mono">{createdCreds.password}</code> (sent by email, simulated).
+          </span>
+          <button onClick={() => setCreatedCreds(null)} className="self-start text-emerald-700 dark:text-emerald-300 font-semibold">
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Sub Tabs */}
       <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-fit">
         <button
@@ -100,6 +145,14 @@ export const StaffManagement: React.FC = () => {
           }`}
         >
           Salary Disbursements & Ledger ({salaryPayouts.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('attendance')}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+            activeTab === 'attendance' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Staff Attendance
         </button>
       </div>
 
@@ -166,6 +219,80 @@ export const StaffManagement: React.FC = () => {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Staff attendance */}
+      {activeTab === 'attendance' && (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-2xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs">
+              <label className="font-semibold text-slate-700 dark:text-slate-300">Date</label>
+              <input
+                type="date"
+                value={attDate}
+                max={today}
+                onChange={e => e.target.value && setAttDate(e.target.value)}
+                className="px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+              />
+              <span className="text-slate-500">{formatDate(attDate)}</span>
+              {alreadyMarked && <span className="text-amber-700 dark:text-amber-400 font-semibold">Already marked: editing</span>}
+            </div>
+            <button
+              onClick={saveStaffAttendance}
+              className="px-4 py-1.5 text-xs font-bold text-white bg-slate-900 dark:bg-amber-600 rounded-lg shadow-xs self-start"
+            >
+              {alreadyMarked ? 'Update Attendance' : 'Save Attendance'}
+            </button>
+          </div>
+          {attSaved && (
+            <div className="p-2 rounded-lg text-xs bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300">
+              Staff attendance saved. Attendance rates are updated.
+            </div>
+          )}
+          <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 font-semibold">
+                <tr>
+                  <th className="px-4 py-2.5">Staff</th>
+                  <th className="px-4 py-2.5">Department</th>
+                  <th className="px-4 py-2.5">Overall Rate</th>
+                  <th className="px-4 py-2.5 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {activeStaff.map(st => {
+                  const mark = attMarks[st.id] || 'present';
+                  return (
+                    <tr key={st.id}>
+                      <td className="px-4 py-2.5 font-semibold text-slate-900 dark:text-white whitespace-nowrap">{st.name}</td>
+                      <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">{st.department}</td>
+                      <td className="px-4 py-2.5 font-mono text-slate-700 dark:text-slate-300">{st.attendanceRate}%</td>
+                      <td className="px-4 py-2.5 text-right whitespace-nowrap space-x-1">
+                        {(['present', 'leave', 'absent'] as StaffMark[]).map(m => (
+                          <button
+                            key={m}
+                            onClick={() => setAttMarks(prev => ({ ...prev, [st.id]: m }))}
+                            className={`px-2.5 py-1 rounded-md font-semibold ${
+                              mark === m
+                                ? m === 'present'
+                                  ? 'bg-emerald-600 text-white'
+                                  : m === 'leave'
+                                    ? 'bg-amber-500 text-slate-950'
+                                    : 'bg-rose-600 text-white'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                            }`}
+                          >
+                            {m === 'present' ? 'Present' : m === 'leave' ? 'Leave' : 'Absent'}
+                          </button>
+                        ))}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

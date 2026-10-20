@@ -4,63 +4,15 @@ import {
   Counselor,
   Lead,
   Student,
-  Invoice,
-  PaymentReceipt,
   ClassScheduleItem,
   StudyMaterial,
   AssessmentTest,
-  StudentTestAttempt,
   StaffMember,
-  SalaryPayout,
   ExamAlert,
   AcademyAnnouncement,
   SupportTicket,
-  UserProfile,
   Question
 } from '../types';
-
-export const INITIAL_USER_PROFILES: Record<string, UserProfile> = {
-  management: {
-    id: 'usr-mgmt-01',
-    name: 'Dr. V. R. Murugan, Ex-IRS',
-    email: 'director@vrmiasacademy.in',
-    role: 'management',
-    designation: 'Founder & Director General',
-    phone: '+91 98401 23456'
-  },
-  office_staff: {
-    id: 'usr-staff-02',
-    name: 'P. Sangeetha',
-    email: 'registrar@vrmiasacademy.in',
-    role: 'office_staff',
-    designation: 'Head Registrar & Finance Controller',
-    phone: '+91 98401 34567'
-  },
-  faculty: {
-    id: 'usr-fac-03',
-    name: 'Dr. K. Ramanathan',
-    email: 'ramanathan.polity@vrmiasacademy.in',
-    role: 'faculty',
-    designation: 'Senior Faculty & Lead - Polity & Governance',
-    phone: '+91 98401 45678'
-  },
-  student: {
-    id: 'usr-stu-04',
-    name: 'Aaditya Sharma',
-    email: 'aaditya.sharma@gmail.com',
-    role: 'student',
-    designation: 'Enrolled Aspirant (Roll: VRM-2026-089)',
-    phone: '+91 97910 88234'
-  },
-  field_agent: {
-    id: 'usr-agent-05',
-    name: 'Deepa Nathan',
-    email: 'deepa.outreach@vrmiasacademy.in',
-    role: 'field_agent',
-    designation: 'Senior Academic Counselor & Field Lead',
-    phone: '+91 98401 56789'
-  }
-};
 
 export const INITIAL_COURSES: Course[] = [
   {
@@ -184,6 +136,54 @@ export const INITIAL_BATCHES: Batch[] = [
     endDate: '2027-01-20',
     leadFacultyId: 'fac-03',
     leadFacultyName: 'Col. Arvind Menon (Retd.)'
+  },
+  {
+    id: 'batch-05',
+    courseId: 'crs-02',
+    courseName: 'UPSC CSAT Intensive Masterclass 2026',
+    name: 'CSAT Evening Booster (Gamma-26)',
+    code: 'B-CSAT-EVE-G',
+    timing: '05:00 PM – 07:00 PM',
+    days: 'Monday, Wednesday & Friday',
+    room: 'Hall 103 (Chanakya Block)',
+    maxCapacity: 40,
+    enrolledCount: 0,
+    startDate: '2026-08-03',
+    endDate: '2026-12-18',
+    leadFacultyId: 'fac-07',
+    leadFacultyName: 'A. Prakash'
+  },
+  {
+    id: 'batch-06',
+    courseId: 'crs-05',
+    courseName: 'TNPSC Combined Civil Services (Group 1) Integrated Batch',
+    name: 'TNPSC Group 1 Integrated Batch (Tamil & English)',
+    code: 'B-TNPSC-G1-01',
+    timing: '10:30 AM – 01:30 PM',
+    days: 'Monday to Saturday',
+    room: 'Hall 201 (Kautilya Block)',
+    maxCapacity: 50,
+    enrolledCount: 0,
+    startDate: '2026-07-06',
+    endDate: '2027-02-27',
+    leadFacultyId: 'fac-05',
+    leadFacultyName: 'R. Thangaraj'
+  },
+  {
+    id: 'batch-07',
+    courseId: 'crs-04',
+    courseName: 'Sociology Optional Mentorship & Thinker Series',
+    name: 'Sociology Weekend Thinkers Batch',
+    code: 'B-SOC-WKND-01',
+    timing: '02:00 PM – 05:00 PM',
+    days: 'Saturday & Sunday',
+    room: 'Discussion Room A',
+    maxCapacity: 30,
+    enrolledCount: 0,
+    startDate: '2026-07-18',
+    endDate: '2027-01-17',
+    leadFacultyId: 'fac-06',
+    leadFacultyName: 'Dr. Nirmala Joseph'
   }
 ];
 
@@ -195,7 +195,8 @@ export const INITIAL_COUNSELORS: Counselor[] = [
     email: 'deepa.outreach@vrmiasacademy.in',
     activeLeadsCount: 14,
     conversionsThisMonth: 8,
-    averageResponseMinutes: 11
+    averageResponseMinutes: 11,
+    specializations: ['GS Foundation', 'CSAT']
   },
   {
     id: 'csl-02',
@@ -204,7 +205,8 @@ export const INITIAL_COUNSELORS: Counselor[] = [
     email: 'vignesh.counsel@vrmiasacademy.in',
     activeLeadsCount: 18,
     conversionsThisMonth: 6,
-    averageResponseMinutes: 18
+    averageResponseMinutes: 18,
+    specializations: ['Optional Subject', 'CSAT', 'Test Series']
   },
   {
     id: 'csl-03',
@@ -213,7 +215,8 @@ export const INITIAL_COUNSELORS: Counselor[] = [
     email: 'ananya.advisory@vrmiasacademy.in',
     activeLeadsCount: 12,
     conversionsThisMonth: 7,
-    averageResponseMinutes: 14
+    averageResponseMinutes: 14,
+    specializations: ['State PSC', 'GS Foundation']
   }
 ];
 
@@ -435,7 +438,7 @@ export const INITIAL_STUDENTS: Student[] = [
     enrolledBatchName: 'Evening Professionals Batch (Delta-26)',
     admissionDate: '2026-06-25',
     totalFee: 135000,
-    scholarshipApplied: 'two_installments' as any,
+    scholarshipApplied: 'none',
     discountAmount: 0,
     netFee: 135000,
     paidFee: 90000,
@@ -474,224 +477,6 @@ export const INITIAL_STUDENTS: Student[] = [
     status: 'active',
     guardianName: 'Dinesh Verma',
     guardianPhone: '+91 97110 55667'
-  }
-];
-
-export const INITIAL_INVOICES: Invoice[] = [
-  {
-    id: 'inv-01',
-    invoiceNumber: 'VRM-INV-2026-089-1',
-    studentId: 'stu-01',
-    studentName: 'Aaditya Sharma',
-    studentRollNumber: 'VRM-2026-089',
-    courseName: 'UPSC CSE 2026 Comprehensive GS Foundation',
-    installmentIndex: 1,
-    totalInstallments: 2,
-    amount: 67500,
-    dueDate: '2026-06-10',
-    status: 'paid',
-    paidDate: '2026-06-10',
-    receiptId: 'rcpt-01'
-  },
-  {
-    id: 'inv-02',
-    invoiceNumber: 'VRM-INV-2026-089-2',
-    studentId: 'stu-01',
-    studentName: 'Aaditya Sharma',
-    studentRollNumber: 'VRM-2026-089',
-    courseName: 'UPSC CSE 2026 Comprehensive GS Foundation',
-    installmentIndex: 2,
-    totalInstallments: 2,
-    amount: 33750,
-    dueDate: '2026-11-10',
-    status: 'pending'
-  },
-  {
-    id: 'inv-03',
-    invoiceNumber: 'VRM-INV-2026-042-1',
-    studentId: 'stu-02',
-    studentName: 'Priya Sridhar',
-    studentRollNumber: 'VRM-2026-042',
-    courseName: 'UPSC CSE 2026 Comprehensive GS Foundation',
-    installmentIndex: 1,
-    totalInstallments: 1,
-    amount: 121500,
-    dueDate: '2026-06-08',
-    status: 'paid',
-    paidDate: '2026-06-08',
-    receiptId: 'rcpt-02'
-  },
-  {
-    id: 'inv-04',
-    invoiceNumber: 'VRM-INV-2026-071-1',
-    studentId: 'stu-04',
-    studentName: 'Meera Nambiar',
-    studentRollNumber: 'VRM-2026-071',
-    courseName: 'UPSC CSE 2026 Comprehensive GS Foundation',
-    installmentIndex: 1,
-    totalInstallments: 3,
-    amount: 45000,
-    dueDate: '2026-06-25',
-    status: 'paid',
-    paidDate: '2026-06-25',
-    receiptId: 'rcpt-03'
-  },
-  {
-    id: 'inv-05',
-    invoiceNumber: 'VRM-INV-2026-071-2',
-    studentId: 'stu-04',
-    studentName: 'Meera Nambiar',
-    studentRollNumber: 'VRM-2026-071',
-    courseName: 'UPSC CSE 2026 Comprehensive GS Foundation',
-    installmentIndex: 2,
-    totalInstallments: 3,
-    amount: 45000,
-    dueDate: '2026-09-25',
-    status: 'paid',
-    paidDate: '2026-09-26',
-    receiptId: 'rcpt-04'
-  },
-  {
-    id: 'inv-06',
-    invoiceNumber: 'VRM-INV-2026-071-3',
-    studentId: 'stu-04',
-    studentName: 'Meera Nambiar',
-    studentRollNumber: 'VRM-2026-071',
-    courseName: 'UPSC CSE 2026 Comprehensive GS Foundation',
-    installmentIndex: 3,
-    totalInstallments: 3,
-    amount: 45000,
-    dueDate: '2026-10-25',
-    status: 'pending'
-  }
-];
-
-export const INITIAL_RECEIPTS: PaymentReceipt[] = [
-  {
-    id: 'rcpt-01',
-    receiptNumber: 'VRM-RCPT-2026-0189',
-    invoiceId: 'inv-01',
-    studentId: 'stu-01',
-    studentName: 'Aaditya Sharma',
-    studentRollNumber: 'VRM-2026-089',
-    courseName: 'UPSC CSE 2026 Comprehensive GS Foundation',
-    batchName: 'Morning Regular Batch (Alpha-26)',
-    installmentDescription: 'Advance Seat Confirmation & Admission Tranche (1 of 2)',
-    amountPaid: 67500,
-    paymentMethod: 'UPI',
-    transactionReference: 'UPI-VRM-983109247192',
-    paidAt: '2026-06-10 11:24 AM',
-    receivedBy: 'P. Sangeetha (Finance Controller)',
-    notes: 'Advance installment processed successfully via HDFC PG. Digital welcome kit issued.',
-    status: 'verified'
-  },
-  {
-    id: 'rcpt-02',
-    receiptNumber: 'VRM-RCPT-2026-0142',
-    invoiceId: 'inv-03',
-    studentId: 'stu-02',
-    studentName: 'Priya Sridhar',
-    studentRollNumber: 'VRM-2026-042',
-    courseName: 'UPSC CSE 2026 Comprehensive GS Foundation',
-    batchName: 'Morning Regular Batch (Alpha-26)',
-    installmentDescription: 'Full Lump-Sum Tuition Settlement (Single Tranche)',
-    amountPaid: 121500,
-    paymentMethod: 'Credit/Debit Card',
-    transactionReference: 'CARD-TXN-4921-X992',
-    paidAt: '2026-06-08 04:15 PM',
-    receivedBy: 'P. Sangeetha (Finance Controller)',
-    notes: 'Full lump-sum one-time fee settlement with 10% prepayment rebate. Verified by accounts.',
-    status: 'verified'
-  },
-  {
-    id: 'rcpt-03',
-    receiptNumber: 'VRM-RCPT-2026-0171-A',
-    invoiceId: 'inv-04',
-    studentId: 'stu-04',
-    studentName: 'Meera Nambiar',
-    studentRollNumber: 'VRM-2026-071',
-    courseName: 'UPSC CSE 2026 Comprehensive GS Foundation',
-    batchName: 'Evening Professionals Batch (Delta-26)',
-    installmentDescription: 'Tuition Installment 1 of 3 (Enrollment Tranche)',
-    amountPaid: 45000,
-    paymentMethod: 'NetBanking',
-    transactionReference: 'NEFT-AXIS-99210041',
-    paidAt: '2026-06-25 10:10 AM',
-    receivedBy: 'P. Sangeetha (Finance Controller)',
-    notes: 'First tranche fee cleared via Axis NetBanking.',
-    status: 'verified'
-  },
-  {
-    id: 'rcpt-04',
-    receiptNumber: 'VRM-RCPT-2026-0171-B',
-    invoiceId: 'inv-05',
-    studentId: 'stu-04',
-    studentName: 'Meera Nambiar',
-    studentRollNumber: 'VRM-2026-071',
-    courseName: 'UPSC CSE 2026 Comprehensive GS Foundation',
-    batchName: 'Evening Professionals Batch (Delta-26)',
-    installmentDescription: 'Tuition Installment 2 of 3 (Mid-term Tranche)',
-    amountPaid: 45000,
-    paymentMethod: 'UPI',
-    transactionReference: 'UPI-ICICI-881290334',
-    paidAt: '2026-09-26 02:45 PM',
-    receivedBy: 'P. Sangeetha (Finance Controller)',
-    notes: 'Second installment cleared on time.',
-    status: 'verified'
-  },
-  {
-    id: 'rcpt-05',
-    receiptNumber: 'VRM-RCPT-2026-0156',
-    invoiceId: 'inv-07',
-    studentId: 'stu-03',
-    studentName: 'Karthik Rajan',
-    studentRollNumber: 'VRM-2026-056',
-    courseName: 'Public Administration Optional Foundation',
-    batchName: 'PubAd Weekend Specialized Batch',
-    installmentDescription: 'Full Course Fee Remittance (Optional Subject)',
-    amountPaid: 45000,
-    paymentMethod: 'Demand Draft',
-    transactionReference: 'DD-SBI-CH-449102',
-    paidAt: '2026-07-02 12:30 PM',
-    receivedBy: 'P. Sangeetha (Finance Controller)',
-    notes: 'Demand Draft deposited at SBI Anna Nagar Branch and realized.',
-    status: 'reconciled'
-  },
-  {
-    id: 'rcpt-06',
-    receiptNumber: 'VRM-RCPT-2026-0104',
-    invoiceId: 'inv-08',
-    studentId: 'stu-05',
-    studentName: 'Suresh Kumar M.',
-    studentRollNumber: 'VRM-2026-104',
-    courseName: 'TNPSC Group 1 Combined Prelims & Mains',
-    batchName: 'Morning Regular Batch (Alpha-26)',
-    installmentDescription: 'Admission Tranche 1 of 2 (State Civil Services)',
-    amountPaid: 25000,
-    paymentMethod: 'Cash',
-    transactionReference: 'CASH-REC-VRM-892',
-    paidAt: '2026-08-01 03:20 PM',
-    receivedBy: 'P. Sangeetha (Finance Controller)',
-    notes: 'Cash payment handed over at academy office. Official stamp affixed.',
-    status: 'verified'
-  },
-  {
-    id: 'rcpt-07',
-    receiptNumber: 'VRM-RCPT-2026-0115',
-    invoiceId: 'inv-09',
-    studentId: 'stu-06',
-    studentName: 'Ananya Reddy',
-    studentRollNumber: 'VRM-2026-115',
-    courseName: 'CSAT Paper-II Aptitude & Comprehension Masterclass',
-    batchName: 'Morning Regular Batch (Alpha-26)',
-    installmentDescription: 'Full Single Payment Settlement (CSAT Module)',
-    amountPaid: 28000,
-    paymentMethod: 'UPI',
-    transactionReference: 'UPI-GPay-664421990',
-    paidAt: '2026-08-15 05:40 PM',
-    receivedBy: 'P. Sangeetha (Finance Controller)',
-    notes: 'Full payment via Google Pay UPI. Batch enrollment confirmed.',
-    status: 'verified'
   }
 ];
 
@@ -750,6 +535,226 @@ export const INITIAL_SCHEDULE: ClassScheduleItem[] = [
     topic: 'India-Middle East-Europe Corridor & G20 Outcomes',
     facultyName: 'Dr. K. Ramanathan',
     room: 'Hall 101 (Chanakya Block)'
+  },
+  {
+    id: 'sch-06',
+    batchId: 'batch-02',
+    batchName: 'Evening Professionals Batch (Delta-26)',
+    day: 'Monday',
+    time: '06:30 PM – 09:30 PM',
+    subject: 'Indian Economy & Macro Trends',
+    topic: 'Banking Sector Reforms, NPAs & Insolvency Code',
+    facultyName: 'S. Meenakshi Sundaram',
+    room: 'Hall 202 (Kautilya Block)'
+  },
+  {
+    id: 'sch-07',
+    batchId: 'batch-02',
+    batchName: 'Evening Professionals Batch (Delta-26)',
+    day: 'Tuesday',
+    time: '06:30 PM – 09:30 PM',
+    subject: 'Indian Polity & Governance',
+    topic: 'Parliament, Legislative Procedure & Committees',
+    facultyName: 'Dr. K. Ramanathan',
+    room: 'Hall 202 (Kautilya Block)'
+  },
+  {
+    id: 'sch-08',
+    batchId: 'batch-02',
+    batchName: 'Evening Professionals Batch (Delta-26)',
+    day: 'Wednesday',
+    time: '06:30 PM – 09:30 PM',
+    subject: 'Modern Indian History',
+    topic: 'Revolt of 1857 & Early Nationalism',
+    facultyName: 'Dr. Shalini Prasad',
+    room: 'Hall 202 (Kautilya Block)'
+  },
+  {
+    id: 'sch-09',
+    batchId: 'batch-02',
+    batchName: 'Evening Professionals Batch (Delta-26)',
+    day: 'Thursday',
+    time: '06:30 PM – 09:30 PM',
+    subject: 'Geography & Environment',
+    topic: 'Monsoon Mechanism & Climate Change Frameworks',
+    facultyName: 'Dr. Shalini Prasad',
+    room: 'Hall 202 (Kautilya Block)'
+  },
+  {
+    id: 'sch-10',
+    batchId: 'batch-02',
+    batchName: 'Evening Professionals Batch (Delta-26)',
+    day: 'Friday',
+    time: '06:30 PM – 09:30 PM',
+    subject: 'Ethics, Integrity & Case Studies (GS-4)',
+    topic: 'Emotional Intelligence in Administration',
+    facultyName: 'Col. Arvind Menon (Retd.)',
+    room: 'Hall 202 (Kautilya Block)'
+  },
+  {
+    id: 'sch-11',
+    batchId: 'batch-03',
+    batchName: 'Weekend Super-30 Mentorship Batch',
+    day: 'Saturday',
+    time: '09:00 AM – 05:00 PM',
+    subject: 'Indian Polity & Governance',
+    topic: 'Centre-State Relations & Cooperative Federalism',
+    facultyName: 'Dr. K. Ramanathan',
+    room: 'Seminar Auditorium 1'
+  },
+  {
+    id: 'sch-12',
+    batchId: 'batch-03',
+    batchName: 'Weekend Super-30 Mentorship Batch',
+    day: 'Sunday',
+    time: '09:00 AM – 05:00 PM',
+    subject: 'Weekly Current Affairs & Mains Answer Writing',
+    topic: 'Full-Length Mains Answer Writing & Peer Review',
+    facultyName: 'Dr. K. Ramanathan',
+    room: 'Seminar Auditorium 1'
+  },
+  {
+    id: 'sch-13',
+    batchId: 'batch-04',
+    batchName: 'PubAd Weekend Specialized Batch',
+    day: 'Saturday',
+    time: '02:00 PM – 06:00 PM',
+    subject: 'Public Administration Paper I',
+    topic: 'Administrative Thinkers: Weber, Taylor & Simon',
+    facultyName: 'Col. Arvind Menon (Retd.)',
+    room: 'Discussion Room B'
+  },
+  {
+    id: 'sch-14',
+    batchId: 'batch-04',
+    batchName: 'PubAd Weekend Specialized Batch',
+    day: 'Sunday',
+    time: '02:00 PM – 06:00 PM',
+    subject: 'Public Administration Paper II',
+    topic: 'Union & State Secretariat, PMO & Cabinet Secretariat',
+    facultyName: 'Col. Arvind Menon (Retd.)',
+    room: 'Discussion Room B'
+  },
+  {
+    id: 'sch-15',
+    batchId: 'batch-05',
+    batchName: 'CSAT Evening Booster (Gamma-26)',
+    day: 'Monday',
+    time: '05:00 PM – 07:00 PM',
+    subject: 'CSAT Quantitative Aptitude',
+    topic: 'Number Systems, Percentages & Ratios',
+    facultyName: 'A. Prakash',
+    room: 'Hall 103 (Chanakya Block)'
+  },
+  {
+    id: 'sch-16',
+    batchId: 'batch-05',
+    batchName: 'CSAT Evening Booster (Gamma-26)',
+    day: 'Wednesday',
+    time: '05:00 PM – 07:00 PM',
+    subject: 'CSAT Logical Reasoning',
+    topic: 'Syllogisms, Seating Arrangement & Blood Relations',
+    facultyName: 'A. Prakash',
+    room: 'Hall 103 (Chanakya Block)'
+  },
+  {
+    id: 'sch-17',
+    batchId: 'batch-05',
+    batchName: 'CSAT Evening Booster (Gamma-26)',
+    day: 'Friday',
+    time: '05:00 PM – 07:00 PM',
+    subject: 'CSAT Reading Comprehension',
+    topic: 'Inference-Based RC & Passage Mapping',
+    facultyName: 'A. Prakash',
+    room: 'Hall 103 (Chanakya Block)'
+  },
+  {
+    id: 'sch-18',
+    batchId: 'batch-06',
+    batchName: 'TNPSC Group 1 Integrated Batch (Tamil & English)',
+    day: 'Monday',
+    time: '10:30 AM – 01:30 PM',
+    subject: 'History & Culture of Tamil Nadu',
+    topic: 'Sangam Age Polity & Literature',
+    facultyName: 'R. Thangaraj',
+    room: 'Hall 201 (Kautilya Block)'
+  },
+  {
+    id: 'sch-19',
+    batchId: 'batch-06',
+    batchName: 'TNPSC Group 1 Integrated Batch (Tamil & English)',
+    day: 'Tuesday',
+    time: '10:30 AM – 01:30 PM',
+    subject: 'Thirukkural Studies',
+    topic: 'Thirukkural in Governance & Administration',
+    facultyName: 'R. Thangaraj',
+    room: 'Hall 201 (Kautilya Block)'
+  },
+  {
+    id: 'sch-20',
+    batchId: 'batch-06',
+    batchName: 'TNPSC Group 1 Integrated Batch (Tamil & English)',
+    day: 'Wednesday',
+    time: '10:30 AM – 01:30 PM',
+    subject: 'Indian Polity & Governance',
+    topic: 'Panchayati Raj & Local Bodies in Tamil Nadu',
+    facultyName: 'Dr. K. Ramanathan',
+    room: 'Hall 201 (Kautilya Block)'
+  },
+  {
+    id: 'sch-21',
+    batchId: 'batch-06',
+    batchName: 'TNPSC Group 1 Integrated Batch (Tamil & English)',
+    day: 'Thursday',
+    time: '10:30 AM – 01:30 PM',
+    subject: 'TN Development Administration',
+    topic: 'Social Welfare Schemes of Tamil Nadu',
+    facultyName: 'R. Thangaraj',
+    room: 'Hall 201 (Kautilya Block)'
+  },
+  {
+    id: 'sch-22',
+    batchId: 'batch-06',
+    batchName: 'TNPSC Group 1 Integrated Batch (Tamil & English)',
+    day: 'Friday',
+    time: '10:30 AM – 01:30 PM',
+    subject: 'Indian Economy & Macro Trends',
+    topic: 'Tamil Nadu Economy & Industrial Policy',
+    facultyName: 'S. Meenakshi Sundaram',
+    room: 'Hall 201 (Kautilya Block)'
+  },
+  {
+    id: 'sch-23',
+    batchId: 'batch-06',
+    batchName: 'TNPSC Group 1 Integrated Batch (Tamil & English)',
+    day: 'Saturday',
+    time: '10:30 AM – 01:30 PM',
+    subject: 'Aptitude & Mental Ability',
+    topic: 'Simplification, Ratio & Data Interpretation',
+    facultyName: 'A. Prakash',
+    room: 'Hall 201 (Kautilya Block)'
+  },
+  {
+    id: 'sch-24',
+    batchId: 'batch-07',
+    batchName: 'Sociology Weekend Thinkers Batch',
+    day: 'Saturday',
+    time: '02:00 PM – 05:00 PM',
+    subject: 'Sociology Paper I',
+    topic: 'Classical Thinkers: Durkheim, Weber & Marx',
+    facultyName: 'Dr. Nirmala Joseph',
+    room: 'Discussion Room A'
+  },
+  {
+    id: 'sch-25',
+    batchId: 'batch-07',
+    batchName: 'Sociology Weekend Thinkers Batch',
+    day: 'Sunday',
+    time: '02:00 PM – 05:00 PM',
+    subject: 'Sociology Paper II',
+    topic: 'Caste System, Kinship & Agrarian Structure in India',
+    facultyName: 'Dr. Nirmala Joseph',
+    room: 'Discussion Room A'
   }
 ];
 
@@ -1269,40 +1274,6 @@ export const INITIAL_QUESTION_BANK: Question[] = [
   }
 ];
 
-export const INITIAL_STUDENT_ATTEMPTS: StudentTestAttempt[] = [
-  {
-    id: 'att-01',
-    testId: 'test-01',
-    testTitle: 'UPSC Prelims Mock 04: Indian Constitution & Parliamentary Procedures',
-    studentId: 'stu-01',
-    studentName: 'Aaditya Sharma',
-    attemptedAt: '2026-10-18T15:30:00Z',
-    score: 16.68,
-    totalMarks: 20,
-    accuracyPercentage: 83.3,
-    correctAnswers: 5,
-    incorrectAnswers: 1,
-    unattempted: 0,
-    rankInBatch: 3,
-    userAnswers: {
-      'q-101': 1,
-      'q-102': 2,
-      'q-103': 0,
-      'q-104': 1,
-      'q-105': 3,
-      'q-106': 0 // incorrect (chose President instead of Parliament)
-    },
-    subjectBreakdown: [
-      { subject: 'Constitutional Articles & Writs', score: 9.34, total: 10 },
-      { subject: 'Parliamentary Procedures & Institutions', score: 7.34, total: 10 }
-    ],
-    improvementAreas: [
-      'Revise Article 124(1) regarding Parliament vs Presidential powers in SC composition.',
-      'Maintain strong command over Writ jurisdiction (Quo-Warranto exception).'
-    ]
-  }
-];
-
 export const INITIAL_STAFF_MEMBERS: StaffMember[] = [
   {
     id: 'usr-fac-03',
@@ -1310,7 +1281,7 @@ export const INITIAL_STAFF_MEMBERS: StaffMember[] = [
     designation: 'Senior Faculty & Lead - Polity & Governance',
     department: 'Faculty',
     subjectsHandling: ['Indian Polity & Constitution', 'Governance & Social Justice', 'Public Administration'],
-    assignedBatches: ['Morning Regular Batch (Alpha-26)', 'Weekend Super-30 Mentorship Batch'],
+    assignedBatches: ['Morning Regular Batch (Alpha-26)', 'Evening Professionals Batch (Delta-26)', 'Weekend Super-30 Mentorship Batch', 'TNPSC Group 1 Integrated Batch (Tamil & English)'],
     phone: '+91 98401 45678',
     email: 'ramanathan.polity@vrmiasacademy.in',
     monthlySalary: 145000,
@@ -1383,48 +1354,84 @@ export const INITIAL_STAFF_MEMBERS: StaffMember[] = [
     joiningDate: '2023-09-01',
     status: 'active',
     attendanceRate: 97.0
-  }
-];
-
-export const INITIAL_SALARY_PAYOUTS: SalaryPayout[] = [
-  {
-    id: 'sal-01',
-    staffId: 'usr-fac-03',
-    staffName: 'Dr. K. Ramanathan',
-    month: 'September 2026',
-    baseSalary: 145000,
-    incentives: 15000,
-    deductions: 8000,
-    netPayout: 152000,
-    paymentDate: '2026-09-30',
-    status: 'paid',
-    transactionRef: 'NEFT-SAL-VRM-9912041'
   },
   {
-    id: 'sal-02',
-    staffId: 'fac-02',
-    staffName: 'S. Meenakshi Sundaram',
-    month: 'September 2026',
-    baseSalary: 130000,
-    incentives: 10000,
-    deductions: 7500,
-    netPayout: 132500,
-    paymentDate: '2026-09-30',
-    status: 'paid',
-    transactionRef: 'NEFT-SAL-VRM-9912042'
+    id: 'fac-05',
+    name: 'R. Thangaraj',
+    designation: 'Faculty - Tamil Nadu History, Culture & Thirukkural',
+    department: 'Faculty',
+    subjectsHandling: ['History & Culture of Tamil Nadu', 'Thirukkural Studies', 'TN Development Administration'],
+    assignedBatches: ['TNPSC Group 1 Integrated Batch (Tamil & English)'],
+    phone: '+91 98401 22145',
+    email: 'thangaraj.tnpsc@vrmiasacademy.in',
+    monthlySalary: 95000,
+    joiningDate: '2022-11-01',
+    status: 'active',
+    attendanceRate: 0
   },
   {
-    id: 'sal-03',
-    staffId: 'usr-staff-02',
-    staffName: 'P. Sangeetha',
-    month: 'September 2026',
-    baseSalary: 85000,
-    incentives: 5000,
-    deductions: 4500,
-    netPayout: 85500,
-    paymentDate: '2026-09-30',
-    status: 'paid',
-    transactionRef: 'NEFT-SAL-VRM-9912043'
+    id: 'fac-06',
+    name: 'Dr. Nirmala Joseph',
+    designation: 'Faculty - Sociology Optional',
+    department: 'Faculty',
+    subjectsHandling: ['Sociology Paper I', 'Sociology Paper II'],
+    assignedBatches: ['Sociology Weekend Thinkers Batch'],
+    phone: '+91 98401 33256',
+    email: 'nirmala.socio@vrmiasacademy.in',
+    monthlySalary: 90000,
+    joiningDate: '2024-02-12',
+    status: 'active',
+    attendanceRate: 0
+  },
+  {
+    id: 'fac-07',
+    name: 'A. Prakash',
+    designation: 'Faculty - CSAT Aptitude & Reasoning',
+    department: 'Faculty',
+    subjectsHandling: ['CSAT Quantitative Aptitude', 'CSAT Logical Reasoning', 'CSAT Reading Comprehension', 'Aptitude & Mental Ability'],
+    assignedBatches: ['CSAT Evening Booster (Gamma-26)', 'TNPSC Group 1 Integrated Batch (Tamil & English)'],
+    phone: '+91 98401 44367',
+    email: 'prakash.csat@vrmiasacademy.in',
+    monthlySalary: 80000,
+    joiningDate: '2023-07-03',
+    status: 'active',
+    attendanceRate: 0
+  },
+  {
+    id: 'stf-06',
+    name: 'J. Sathish Kumar',
+    designation: 'Front Office & Accounts Executive',
+    department: 'Administration',
+    phone: '+91 98401 55478',
+    email: 'frontoffice@vrmiasacademy.in',
+    monthlySalary: 38000,
+    joiningDate: '2024-06-01',
+    status: 'active',
+    attendanceRate: 0
+  },
+  {
+    id: 'stf-07',
+    name: 'Vigneshwaran K.',
+    designation: 'Academic Counselor',
+    department: 'Counseling',
+    phone: '+91 98401 67890',
+    email: 'vignesh.counsel@vrmiasacademy.in',
+    monthlySalary: 48000,
+    joiningDate: '2024-01-08',
+    status: 'active',
+    attendanceRate: 0
+  },
+  {
+    id: 'stf-08',
+    name: 'Ananya Sen',
+    designation: 'Academic Counselor (State PSC)',
+    department: 'Counseling',
+    phone: '+91 98401 78901',
+    email: 'ananya.advisory@vrmiasacademy.in',
+    monthlySalary: 46000,
+    joiningDate: '2024-04-15',
+    status: 'active',
+    attendanceRate: 0
   }
 ];
 

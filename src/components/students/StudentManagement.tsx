@@ -23,6 +23,7 @@ export const StudentManagement: React.FC = () => {
     receipts,
     viewReceipt,
     openModal,
+    accounts,
     role
   } = useApp();
 
@@ -165,7 +166,7 @@ export const StudentManagement: React.FC = () => {
                         {student.averageTestScore > 0 ? (
                           <div>
                             <span className="font-semibold text-slate-900 dark:text-white">{student.averageTestScore}</span>
-                            <span className="text-[10px] text-slate-400"> / 20</span>
+                            <span className="text-[10px] text-slate-400">%</span>
                           </div>
                         ) : (
                           <span className="text-slate-400">First Mock Due</span>
@@ -235,7 +236,7 @@ export const StudentManagement: React.FC = () => {
               <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
                 <span className="text-slate-500 dark:text-slate-400 block">Average Mock Score</span>
                 <span className="text-base font-mono font-bold text-slate-900 dark:text-white mt-1 block">
-                  {selectedStudent.averageTestScore || 'Pending'}
+                  {selectedStudent.averageTestScore ? `${selectedStudent.averageTestScore}%` : 'No tests yet'}
                 </span>
               </div>
               <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
@@ -259,9 +260,26 @@ export const StudentManagement: React.FC = () => {
                 <span className="text-slate-400 dark:text-slate-500 font-medium">Guardian Details</span>
                 <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{selectedStudent.guardianName}</p>
                 <p className="font-mono text-slate-600 dark:text-slate-400 mt-0.5">{selectedStudent.guardianPhone}</p>
-                <p className="text-slate-500 dark:text-slate-400 mt-2">Scholarship: <span className="capitalize font-semibold text-amber-800 dark:text-amber-400">{selectedStudent.scholarshipApplied.replace('_', ' ')}</span></p>
+                <p className="text-slate-500 dark:text-slate-400 mt-2">Scholarship: <span className="capitalize font-semibold text-amber-800 dark:text-amber-400">{selectedStudent.scholarshipApplied.replace(/_/g, ' ')}</span></p>
               </div>
             </div>
+
+            {(role === 'management' || role === 'office_staff') && (() => {
+              const acc = accounts.find(a => a.linkedStudentId === selectedStudent.id);
+              return (
+                <div className="text-xs p-3 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-200">
+                  <span className="font-semibold">Portal login:</span>{' '}
+                  {acc ? (
+                    <>
+                      <code className="font-mono">{acc.username}</code> / <code className="font-mono">{acc.password}</code>
+                      <span className="text-emerald-700/80 dark:text-emerald-300/70"> (shown for the demo only)</span>
+                    </>
+                  ) : (
+                    'not created'
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Fee Invoices History */}
             <div>

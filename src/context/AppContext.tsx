@@ -1,55 +1,91 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
-  UserRole,
-  UserProfile,
-  Course,
+  AcademyAnnouncement,
+  AssessmentTest,
+  AttendanceSession,
   Batch,
+  ClassScheduleItem,
   Counselor,
+  Course,
+  ExamAlert,
+  Invoice,
   Lead,
   LeadStatus,
-  Student,
-  Invoice,
-  PaymentReceipt,
-  ClassScheduleItem,
-  StudyMaterial,
-  AssessmentTest,
-  StudentTestAttempt,
-  StaffMember,
-  SalaryPayout,
-  ExamAlert,
-  AcademyAnnouncement,
-  SupportTicket,
-  ScholarshipType,
   PaymentPlanType,
-  Question
+  PaymentReceipt,
+  Question,
+  SalaryPayout,
+  ScholarshipType,
+  StaffAttendanceEntry,
+  StaffMember,
+  Student,
+  StudentTestAttempt,
+  StudyMaterial,
+  SupportTicket,
+  UserAccount,
+  UserProfile,
+  UserRole
 } from '../types';
 import {
-  INITIAL_USER_PROFILES,
-  INITIAL_COURSES,
+  INITIAL_ANNOUNCEMENTS,
   INITIAL_BATCHES,
-  INITIAL_COUNSELORS,
-  INITIAL_LEADS,
-  INITIAL_STUDENTS,
-  INITIAL_INVOICES,
-  INITIAL_RECEIPTS,
+  INITIAL_COURSES,
+  INITIAL_EXAM_ALERTS,
+  INITIAL_QUESTION_BANK,
   INITIAL_SCHEDULE,
   INITIAL_STUDY_MATERIALS,
-  INITIAL_ASSESSMENT_TESTS,
-  INITIAL_QUESTION_BANK,
-  INITIAL_STUDENT_ATTEMPTS,
-  INITIAL_STAFF_MEMBERS,
-  INITIAL_SALARY_PAYOUTS,
-  INITIAL_EXAM_ALERTS,
-  INITIAL_ANNOUNCEMENTS,
   INITIAL_TICKETS
 } from '../data/mockData';
+import { buildSeed, DEMO_PERSONA_ACCOUNT_IDS, SeedData, studentDefaultPassword } from '../data/seed';
+import { canAccess, HOME_TAB } from '../config/access';
+import { nowDisplay, todayISO } from '../lib/dates';
+import {
+  allocatePayment,
+  buildInstallmentSchedule,
+  computeDiscount,
+  effectiveInvoiceStatus,
+  invoiceBalance,
+  nextSequence
+} from '../lib/fees';
+
+type PaymentMethod = PaymentReceipt['paymentMethod'];
+
+export interface AdmissionInput {
+  leadId?: string;
+  studentName: string;
+  email: string;
+  phone: string;
+  gender: string;
+  address: string;
+  guardianName: string;
+  guardianPhone: string;
+  courseId: string;
+  batchId: string;
+  scholarship: ScholarshipType;
+  customDiscountAmount?: number;
+  paymentPlan: PaymentPlanType;
+  paymentMethod: PaymentMethod;
+  advancePaymentAmount: number;
+  transactionRef?: string;
+}
+
+export interface Credentials {
+  username: string;
+  password: string;
+}
 
 interface AppContextType {
   // Authentication & RBAC
   isAuthenticated: boolean;
   currentUser: UserProfile;
+  currentAccount: UserAccount | null;
   role: UserRole;
-  login: (emailOrUser: string, pass: string) => boolean;
+  /** The Student record of the logged-in student (undefined for staff). */
+  currentStudent: Student | undefined;
+  /** The StaffMember record of the logged-in staff user (undefined for management/students). */
+  currentStaff: StaffMember | undefined;
+  accounts: UserAccount[];
+  login: (username: string, pass: string) => boolean;
   quickLogin: (role: UserRole) => void;
   logout: () => void;
 
@@ -62,9 +98,13 @@ interface AppContextType {
   setMobileMenuOpen: (open: boolean) => void;
   isFullscreen: boolean;
   toggleFullscreen: () => void;
-
   activeTab: string;
   setActiveTab: (tab: string) => void;
+
+  /** Demo "today" (local date, YYYY-MM-DD). */
+  today: string;
+
+  // Data (derived values such as attendance %, balances and seat counts are always recomputed)
   courses: Course[];
   batches: Batch[];
   counselors: Counselor[];
@@ -73,38 +113,26 @@ interface AppContextType {
   invoices: Invoice[];
   receipts: PaymentReceipt[];
   schedule: ClassScheduleItem[];
+  attendance: AttendanceSession[];
   materials: StudyMaterial[];
   assessmentTests: AssessmentTest[];
   questionBank: Question[];
   studentAttempts: StudentTestAttempt[];
   staffMembers: StaffMember[];
+  staffAttendance: StaffAttendanceEntry[];
   salaryPayouts: SalaryPayout[];
   examAlerts: ExamAlert[];
   announcements: AcademyAnnouncement[];
+  /** Alerts / notices filtered to what the current role is allowed to see. */
+  visibleExamAlerts: ExamAlert[];
+  visibleAnnouncements: AcademyAnnouncement[];
   tickets: SupportTicket[];
-  
+
   // Actions
   addLead: (lead: Partial<Lead>) => Lead;
   updateLeadStatus: (leadId: string, status: LeadStatus, notes?: string) => void;
   addFollowUp: (leadId: string, notes: string, nextDate?: string, statusUpdate?: LeadStatus) => void;
-  convertLeadToAdmission: (data: {
-    leadId?: string;
-    studentName: string;
-    email: string;
-    phone: string;
-    gender: string;
-    address: string;
-    guardianName: string;
-    guardianPhone: string;
-    courseId: string;
-    batchId: string;
-    scholarship: ScholarshipType;
-    customDiscountAmount?: number;
-    paymentPlan: PaymentPlanType;
-    paymentMethod: 'UPI' | 'Credit/Debit Card' | 'NetBanking' | 'Demand Draft' | 'Cash';
-    advancePaymentAmount: number;
-    transactionRef?: string;
-  }) => { student: Student; receipt: PaymentReceipt };
+  convertLeadToAdmission: (data: AdmissionInput) => { student: Student; receipt: PaymentReceipt; credentials: Credentials };
   addCourse: (course: Omit<Course, 'id' | 'activeBatchesCount'>) => void;
   addBatch: (batch: Omit<Batch, 'id' | 'enrolledCount'>) => void;
   recordBatchAttendance: (
@@ -113,9 +141,10 @@ interface AppContextType {
     subject: string,
     records: { studentId: string; studentName: string; rollNumber: string; status: 'present' | 'absent' | 'late' }[]
   ) => void;
+  /** Per-student status for a given batch/date, if attendance was already taken. */
+  getSessionStatuses: (batchId: string, date: string) => Record<string, 'present' | 'absent' | 'late'> | null;
   addStudyMaterial: (material: Omit<StudyMaterial, 'id' | 'uploadedAt'>) => void;
-  
-  // Question Bank & Assessments
+
   addQuestionToBank: (question: Omit<Question, 'id'>) => Question;
   updateQuestionInBank: (questionId: string, updated: Partial<Question>) => void;
   deleteQuestionFromBank: (questionId: string) => void;
@@ -130,23 +159,20 @@ interface AppContextType {
     negativeMarksPerWrong?: number;
   }) => AssessmentTest;
   submitTestAttempt: (attempt: Omit<StudentTestAttempt, 'id' | 'attemptedAt'>) => StudentTestAttempt;
-  
-  // Fee Management & Payment History
-  recordFeePayment: (
-    invoiceId: string,
-    amount: number,
-    paymentMethod: 'UPI' | 'Credit/Debit Card' | 'NetBanking' | 'Demand Draft' | 'Cash',
-    notes?: string
-  ) => PaymentReceipt;
+
+  /** Collects a payment against an invoice; any amount beyond it flows to the next open installments. */
+  recordFeePayment: (invoiceId: string, amount: number, paymentMethod: PaymentMethod, notes?: string) => PaymentReceipt;
+  /** Collects a payment for a student; applied to the oldest open installments first. */
   recordDirectFeePayment: (data: {
     studentId: string;
     amount: number;
-    paymentMethod: PaymentReceipt['paymentMethod'];
+    paymentMethod: PaymentMethod;
     installmentDescription?: string;
     notes?: string;
     transactionReference?: string;
   }) => PaymentReceipt;
-  
+  studentOutstanding: (studentId: string) => number;
+
   addExamAlert: (alert: Omit<ExamAlert, 'id'>) => void;
   addAnnouncement: (ann: Omit<AcademyAnnouncement, 'id' | 'date'>) => void;
   createSupportTicket: (ticket: {
@@ -160,9 +186,10 @@ interface AppContextType {
   }) => SupportTicket;
   replyToTicket: (ticketId: string, text: string, isStaff: boolean, senderName: string) => void;
   updateTicketStatus: (ticketId: string, status: SupportTicket['status']) => void;
-  addStaffMember: (staff: Omit<StaffMember, 'id' | 'attendanceRate'>) => void;
+  addStaffMember: (staff: Omit<StaffMember, 'id' | 'attendanceRate'>) => { staff: StaffMember; credentials: Credentials };
+  markStaffAttendance: (date: string, entries: { staffId: string; status: StaffAttendanceEntry['status'] }[]) => void;
   resetToDefaultData: () => void;
-  
+
   // Modals & UI helpers
   activeModal: { type: string; data?: any } | null;
   openModal: (type: string, data?: any) => void;
@@ -175,15 +202,18 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const STORAGE_PREFIX = 'vrm_ias_erp_';
+// Bumped from the v1 prefix so browsers holding the old data shape start fresh.
+const STORAGE_PREFIX = 'vrm_erp_v2_';
 
-function loadFromStorage<T>(key: string, defaultValue: T): T {
+let cachedSeed: SeedData | null = null;
+const getSeed = (): SeedData => (cachedSeed ??= buildSeed());
+
+function loadFromStorage<T>(key: string, fallback: () => T): T {
   try {
     const raw = localStorage.getItem(STORAGE_PREFIX + key);
-    return raw ? JSON.parse(raw) : defaultValue;
-  } catch (e) {
-    console.error('Failed to parse localStorage for', key, e);
-    return defaultValue;
+    return raw ? (JSON.parse(raw) as T) : fallback();
+  } catch {
+    return fallback();
   }
 }
 
@@ -191,216 +221,304 @@ function saveToStorage<T>(key: string, value: T): void {
   try {
     localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
   } catch (e) {
-    console.error('Failed to save to localStorage for', key, e);
+    console.warn('localStorage write failed for', key, e);
   }
 }
 
-export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Auth state - defaults to false so user is presented with the RBAC mock login screen
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => loadFromStorage<boolean>('is_authenticated', false));
-  const [role, setRoleState] = useState<UserRole>(() => loadFromStorage<UserRole>('role', 'management'));
-  const [currentUser, setCurrentUser] = useState<UserProfile>(() => {
-    const savedRole = loadFromStorage<UserRole>('role', 'management');
-    return INITIAL_USER_PROFILES[savedRole] || INITIAL_USER_PROFILES.management;
-  });
+function clearOwnStorage() {
+  try {
+    Object.keys(localStorage)
+      .filter(k => k.startsWith(STORAGE_PREFIX))
+      .forEach(k => localStorage.removeItem(k));
+  } catch {
+    /* storage unavailable */
+  }
+}
 
-  // UI state
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => loadFromStorage<'light' | 'dark'>('theme', 'light'));
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => loadFromStorage<boolean>('sidebar_collapsed', false));
+/** useState that persists to localStorage under STORAGE_PREFIX + key. */
+function usePersistentState<T>(key: string, fallback: () => T) {
+  const [value, setValue] = useState<T>(() => loadFromStorage(key, fallback));
+  useEffect(() => saveToStorage(key, value), [key, value]);
+  return [value, setValue] as const;
+}
+
+const GUEST_PROFILE: UserProfile = {
+  id: 'guest',
+  name: 'Guest',
+  email: '',
+  role: 'management',
+  designation: '',
+  phone: ''
+};
+
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const today = todayISO();
+
+  // ---------- auth ----------
+  const [accounts, setAccounts] = usePersistentState<UserAccount[]>('accounts', () => getSeed().accounts);
+  const [currentAccountId, setCurrentAccountId] = usePersistentState<string | null>('current_account', () => null);
+
+  // ---------- UI ----------
+  const [theme, setTheme] = usePersistentState<'light' | 'dark'>('theme', () => 'light');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = usePersistentState<boolean>('sidebar_collapsed', () => false);
   const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-
-  // App active tab
-  const [activeTab, setActiveTabState] = useState<string>(() => loadFromStorage<string>('active_tab', 'crm'));
-
-  // Core Data
-  const [courses, setCourses] = useState<Course[]>(() => loadFromStorage('courses', INITIAL_COURSES));
-  const [batches, setBatches] = useState<Batch[]>(() => loadFromStorage('batches', INITIAL_BATCHES));
-  const [counselors, setCounselors] = useState<Counselor[]>(() => loadFromStorage('counselors', INITIAL_COUNSELORS));
-  const [leads, setLeads] = useState<Lead[]>(() => loadFromStorage('leads', INITIAL_LEADS));
-  const [students, setStudents] = useState<Student[]>(() => loadFromStorage('students', INITIAL_STUDENTS));
-  const [invoices, setInvoices] = useState<Invoice[]>(() => loadFromStorage('invoices', INITIAL_INVOICES));
-  const [receipts, setReceipts] = useState<PaymentReceipt[]>(() => loadFromStorage('receipts', INITIAL_RECEIPTS));
-  const [schedule, setSchedule] = useState<ClassScheduleItem[]>(() => loadFromStorage('schedule', INITIAL_SCHEDULE));
-  const [materials, setMaterials] = useState<StudyMaterial[]>(() => loadFromStorage('materials', INITIAL_STUDY_MATERIALS));
-  const [assessmentTests, setAssessmentTests] = useState<AssessmentTest[]>(() => loadFromStorage('assessmentTests', INITIAL_ASSESSMENT_TESTS));
-  const [questionBank, setQuestionBank] = useState<Question[]>(() => loadFromStorage('questionBank', INITIAL_QUESTION_BANK));
-  const [studentAttempts, setStudentAttempts] = useState<StudentTestAttempt[]>(() => loadFromStorage('studentAttempts', INITIAL_STUDENT_ATTEMPTS));
-  const [staffMembers, setStaffMembers] = useState<StaffMember[]>(() => loadFromStorage('staffMembers', INITIAL_STAFF_MEMBERS));
-  const [salaryPayouts, setSalaryPayouts] = useState<SalaryPayout[]>(() => loadFromStorage('salaryPayouts', INITIAL_SALARY_PAYOUTS));
-  const [examAlerts, setExamAlerts] = useState<ExamAlert[]>(() => loadFromStorage('examAlerts', INITIAL_EXAM_ALERTS));
-  const [announcements, setAnnouncements] = useState<AcademyAnnouncement[]>(() => loadFromStorage('announcements', INITIAL_ANNOUNCEMENTS));
-  const [tickets, setTickets] = useState<SupportTicket[]>(() => loadFromStorage('tickets', INITIAL_TICKETS));
-
+  const [activeTabRaw, setActiveTabRaw] = usePersistentState<string>('active_tab', () => 'crm');
   const [activeModal, setActiveModal] = useState<{ type: string; data?: any } | null>(null);
   const [selectedReceiptForView, setSelectedReceiptForView] = useState<PaymentReceipt | null>(null);
 
-  // Sync state to localStorage
-  useEffect(() => { saveToStorage('is_authenticated', isAuthenticated); }, [isAuthenticated]);
-  useEffect(() => { saveToStorage('role', role); }, [role]);
-  useEffect(() => { saveToStorage('theme', theme); }, [theme]);
-  useEffect(() => { saveToStorage('sidebar_collapsed', isSidebarCollapsed); }, [isSidebarCollapsed]);
-  useEffect(() => { saveToStorage('active_tab', activeTab); }, [activeTab]);
-  useEffect(() => { saveToStorage('courses', courses); }, [courses]);
-  useEffect(() => { saveToStorage('batches', batches); }, [batches]);
-  useEffect(() => { saveToStorage('counselors', counselors); }, [counselors]);
-  useEffect(() => { saveToStorage('leads', leads); }, [leads]);
-  useEffect(() => { saveToStorage('students', students); }, [students]);
-  useEffect(() => { saveToStorage('invoices', invoices); }, [invoices]);
-  useEffect(() => { saveToStorage('receipts', receipts); }, [receipts]);
-  useEffect(() => { saveToStorage('schedule', schedule); }, [schedule]);
-  useEffect(() => { saveToStorage('materials', materials); }, [materials]);
-  useEffect(() => { saveToStorage('assessmentTests', assessmentTests); }, [assessmentTests]);
-  useEffect(() => { saveToStorage('questionBank', questionBank); }, [questionBank]);
-  useEffect(() => { saveToStorage('studentAttempts', studentAttempts); }, [studentAttempts]);
-  useEffect(() => { saveToStorage('staffMembers', staffMembers); }, [staffMembers]);
-  useEffect(() => { saveToStorage('salaryPayouts', salaryPayouts); }, [salaryPayouts]);
-  useEffect(() => { saveToStorage('examAlerts', examAlerts); }, [examAlerts]);
-  useEffect(() => { saveToStorage('announcements', announcements); }, [announcements]);
-  useEffect(() => { saveToStorage('tickets', tickets); }, [tickets]);
+  // ---------- data ----------
+  const [coursesRaw, setCourses] = usePersistentState<Course[]>('courses', () => INITIAL_COURSES);
+  const [batchesRaw, setBatches] = usePersistentState<Batch[]>('batches', () => INITIAL_BATCHES);
+  const [counselorsRaw, setCounselors] = usePersistentState<Counselor[]>('counselors', () => getSeed().counselors);
+  const [leads, setLeads] = usePersistentState<Lead[]>('leads', () => getSeed().leads);
+  const [studentsRaw, setStudents] = usePersistentState<Student[]>('students', () => getSeed().students);
+  const [invoicesRaw, setInvoices] = usePersistentState<Invoice[]>('invoices', () => getSeed().invoices);
+  const [receipts, setReceipts] = usePersistentState<PaymentReceipt[]>('receipts', () => getSeed().receipts);
+  const [schedule, setSchedule] = usePersistentState<ClassScheduleItem[]>('schedule', () => INITIAL_SCHEDULE);
+  const [attendance, setAttendance] = usePersistentState<AttendanceSession[]>('attendance', () => getSeed().attendance);
+  const [materials, setMaterials] = usePersistentState<StudyMaterial[]>('materials', () => INITIAL_STUDY_MATERIALS);
+  const [assessmentTests, setAssessmentTests] = usePersistentState<AssessmentTest[]>('assessmentTests', () => getSeed().assessmentTests);
+  const [questionBank, setQuestionBank] = usePersistentState<Question[]>('questionBank', () => INITIAL_QUESTION_BANK);
+  const [studentAttempts, setStudentAttempts] = usePersistentState<StudentTestAttempt[]>('studentAttempts', () => getSeed().studentAttempts);
+  const [staffRaw, setStaffMembers] = usePersistentState<StaffMember[]>('staffMembers', () => getSeed().staffMembers);
+  const [staffAttendance, setStaffAttendance] = usePersistentState<StaffAttendanceEntry[]>('staffAttendance', () => getSeed().staffAttendance);
+  const [salaryPayouts, setSalaryPayouts] = usePersistentState<SalaryPayout[]>('salaryPayouts', () => getSeed().salaryPayouts);
+  const [examAlerts, setExamAlerts] = usePersistentState<ExamAlert[]>('examAlerts', () => INITIAL_EXAM_ALERTS);
+  const [announcements, setAnnouncements] = usePersistentState<AcademyAnnouncement[]>('announcements', () => INITIAL_ANNOUNCEMENTS);
+  const [tickets, setTickets] = usePersistentState<SupportTicket[]>('tickets', () => INITIAL_TICKETS);
 
-  // Handle dark mode class on HTML document root
-  useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+  // ---------- identity ----------
+  const currentAccount = useMemo(
+    () => accounts.find(a => a.id === currentAccountId) || null,
+    [accounts, currentAccountId]
+  );
+  const isAuthenticated = !!currentAccount;
+  const role: UserRole = currentAccount?.role || 'management';
+  const currentUser: UserProfile = currentAccount
+    ? {
+        id: currentAccount.linkedStudentId || currentAccount.linkedStaffId || currentAccount.id,
+        name: currentAccount.name,
+        email: currentAccount.email,
+        role: currentAccount.role,
+        designation: currentAccount.designation,
+        phone: currentAccount.phone
+      }
+    : GUEST_PROFILE;
+
+  // ---------- derived data ----------
+  const invoices = useMemo(
+    () => invoicesRaw.map(inv => ({ ...inv, paidAmount: inv.paidAmount || 0, status: effectiveInvoiceStatus(inv, today) })),
+    [invoicesRaw, today]
+  );
+
+  const students = useMemo(() => {
+    const paidByStudent = new Map<string, number>();
+    for (const inv of invoicesRaw) paidByStudent.set(inv.studentId, (paidByStudent.get(inv.studentId) || 0) + (inv.paidAmount || 0));
+
+    const attendanceStats = new Map<string, { attended: number; total: number }>();
+    const byBatch = new Map<string, Student[]>();
+    for (const s of studentsRaw) {
+      const list = byBatch.get(s.enrolledBatchId) || [];
+      list.push(s);
+      byBatch.set(s.enrolledBatchId, list);
     }
+    for (const session of attendance) {
+      const absent = new Set(session.absentIds);
+      for (const s of byBatch.get(session.batchId) || []) {
+        if (s.admissionDate > session.date) continue;
+        const st = attendanceStats.get(s.id) || { attended: 0, total: 0 };
+        st.total++;
+        if (!absent.has(s.id)) st.attended++;
+        attendanceStats.set(s.id, st);
+      }
+    }
+
+    const scoreStats = new Map<string, { sum: number; n: number }>();
+    for (const a of studentAttempts) {
+      if (!a.totalMarks) continue;
+      const st = scoreStats.get(a.studentId) || { sum: 0, n: 0 };
+      st.sum += Math.max(0, a.score) / a.totalMarks;
+      st.n++;
+      scoreStats.set(a.studentId, st);
+    }
+
+    return studentsRaw.map(s => {
+      const paid = paidByStudent.get(s.id) || 0;
+      const att = attendanceStats.get(s.id);
+      const sc = scoreStats.get(s.id);
+      return {
+        ...s,
+        paidFee: paid,
+        balanceFee: Math.max(0, s.netFee - paid),
+        attendancePercentage: att && att.total > 0 ? Math.round((att.attended / att.total) * 1000) / 10 : 100,
+        // Average test performance as a percentage (0–100).
+        averageTestScore: sc ? Math.round((sc.sum / sc.n) * 1000) / 10 : 0
+      };
+    });
+  }, [studentsRaw, invoicesRaw, attendance, studentAttempts]);
+
+  const batches = useMemo(
+    () =>
+      batchesRaw.map(b => ({
+        ...b,
+        enrolledCount: studentsRaw.filter(s => s.enrolledBatchId === b.id && s.status === 'active').length
+      })),
+    [batchesRaw, studentsRaw]
+  );
+
+  const courses = useMemo(
+    () =>
+      coursesRaw.map(c => ({
+        ...c,
+        activeBatchesCount: batchesRaw.filter(b => b.courseId === c.id && b.endDate >= today).length
+      })),
+    [coursesRaw, batchesRaw, today]
+  );
+
+  const counselors = useMemo(() => {
+    const month = today.slice(0, 7);
+    return counselorsRaw.map(c => {
+      const mine = leads.filter(l => l.assignedCounselorId === c.id);
+      const responseMins = mine
+        .filter(l => l.followUps.length > 0)
+        .map(l => (new Date(l.followUps[0].timestamp).getTime() - new Date(l.createdAt).getTime()) / 60000)
+        .filter(m => m >= 0 && m < 60 * 24 * 3);
+      return {
+        ...c,
+        activeLeadsCount: mine.filter(l => l.status !== 'converted' && l.status !== 'dropped').length,
+        conversionsThisMonth: mine.filter(l => l.status === 'converted' && (l.convertedAt || '').slice(0, 7) === month).length,
+        averageResponseMinutes: responseMins.length ? Math.round(responseMins.reduce((a, b) => a + b, 0) / responseMins.length) : 0
+      };
+    });
+  }, [counselorsRaw, leads, today]);
+
+  const staffMembers = useMemo(
+    () =>
+      staffRaw.map(s => {
+        const entries = staffAttendance.filter(a => a.staffId === s.id);
+        const present = entries.filter(a => a.status === 'present').length;
+        return { ...s, attendanceRate: entries.length ? Math.round((present / entries.length) * 1000) / 10 : 100 };
+      }),
+    [staffRaw, staffAttendance]
+  );
+
+  const currentStudent = useMemo(
+    () => (currentAccount?.linkedStudentId ? students.find(s => s.id === currentAccount.linkedStudentId) : undefined),
+    [currentAccount, students]
+  );
+  const currentStaff = useMemo(
+    () => (currentAccount?.linkedStaffId ? staffMembers.find(s => s.id === currentAccount.linkedStaffId) : undefined),
+    [currentAccount, staffMembers]
+  );
+
+  const visibleExamAlerts = useMemo(() => {
+    if (role === 'management' || role === 'office_staff') return examAlerts;
+    const allowed = role === 'student' ? ['All', 'Students'] : ['All', 'Staff'];
+    return examAlerts.filter(a => allowed.includes(a.targetAudience));
+  }, [examAlerts, role]);
+
+  const visibleAnnouncements = useMemo(() => {
+    if (role === 'management' || role === 'office_staff') return announcements;
+    const allowed = role === 'student' ? ['All', 'Students'] : ['All', 'Faculty'];
+    return announcements.filter(a => allowed.includes(a.audience));
+  }, [announcements, role]);
+
+  // ---------- routing (with access guard) ----------
+  const activeTab = isAuthenticated && canAccess(role, activeTabRaw) ? activeTabRaw : HOME_TAB[role];
+  const setActiveTab = (tab: string) => {
+    if (canAccess(role, tab)) setActiveTabRaw(tab);
+    setMobileMenuOpen(false);
+  };
+
+  // ---------- effects ----------
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
-  // Fullscreen event listener
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    const handle = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handle);
+    return () => document.removeEventListener('fullscreenchange', handle);
   }, []);
 
-  const toggleTheme = () => {
-    setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
-  };
-
-  const toggleSidebar = () => {
-    setIsSidebarCollapsed(prev => !prev);
-  };
-
+  // ---------- UI actions ----------
+  const toggleTheme = () => setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
+  const toggleSidebar = () => setIsSidebarCollapsed(prev => !prev);
   const toggleFullscreen = () => {
     if (!document.fullscreenElement && !isFullscreen) {
-      if (document.documentElement.requestFullscreen) {
-        document.documentElement
-          .requestFullscreen()
-          .then(() => {
-            setIsFullscreen(true);
-          })
-          .catch(err => {
-            console.warn('Native fullscreen not allowed in iframe, enabling app viewport fullscreen:', err);
-            setIsFullscreen(true);
-          });
-      } else {
-        setIsFullscreen(true);
-      }
+      const req = document.documentElement.requestFullscreen?.();
+      if (req) req.then(() => setIsFullscreen(true)).catch(() => setIsFullscreen(true));
+      else setIsFullscreen(true);
     } else {
-      if (document.fullscreenElement && document.exitFullscreen) {
-        document.exitFullscreen().catch(err => console.warn(err));
-      }
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => undefined);
       setIsFullscreen(false);
     }
   };
+  const openModal = (type: string, data?: any) => setActiveModal({ type, data });
+  const closeModal = () => setActiveModal(null);
+  const viewReceipt = (receipt: PaymentReceipt) => setSelectedReceiptForView(receipt);
+  const closeReceiptView = () => setSelectedReceiptForView(null);
 
-  // Auth Functions
-  const login = (emailOrUser: string, _pass: string): boolean => {
-    const clean = emailOrUser.toLowerCase().trim();
-    let detectedRole: UserRole = 'management';
+  // ---------- auth actions ----------
+  const signIn = (account: UserAccount) => {
+    setCurrentAccountId(account.id);
+    setActiveTabRaw(HOME_TAB[account.role]);
+  };
 
-    if (clean.includes('director') || clean.includes('admin') || clean.includes('murugan')) {
-      detectedRole = 'management';
-    } else if (clean.includes('registrar') || clean.includes('sangeetha') || clean.includes('office') || clean.includes('finance')) {
-      detectedRole = 'office_staff';
-    } else if (clean.includes('ramanathan') || clean.includes('faculty') || clean.includes('polity') || clean.includes('mentor')) {
-      detectedRole = 'faculty';
-    } else if (clean.includes('vrm-2026') || clean.includes('student') || clean.includes('aaditya') || clean.includes('sharma')) {
-      detectedRole = 'student';
-    } else if (clean.includes('deepa') || clean.includes('agent') || clean.includes('counselor') || clean.includes('outreach')) {
-      detectedRole = 'field_agent';
-    } else {
-      detectedRole = 'management';
-    }
-
-    quickLogin(detectedRole);
+  const login = (username: string, pass: string): boolean => {
+    const u = username.trim().toLowerCase();
+    const account = accounts.find(
+      a => (a.username.toLowerCase() === u || a.email.toLowerCase() === u) && a.password === pass
+    );
+    if (!account) return false;
+    signIn(account);
     return true;
   };
 
   const quickLogin = (newRole: UserRole) => {
-    setRoleState(newRole);
-    const profile = INITIAL_USER_PROFILES[newRole] || INITIAL_USER_PROFILES.management;
-    setCurrentUser(profile);
-    setIsAuthenticated(true);
-
-    // Navigate to role-appropriate home tab
-    if (newRole === 'student') {
-      setActiveTabState('student_portal');
-    } else if (newRole === 'faculty') {
-      setActiveTabState('faculty_portal');
-    } else if (newRole === 'field_agent') {
-      setActiveTabState('crm');
-    } else {
-      setActiveTabState('crm');
-    }
+    const account = accounts.find(a => a.id === DEMO_PERSONA_ACCOUNT_IDS[newRole]);
+    if (account) signIn(account);
   };
 
   const logout = () => {
-    setIsAuthenticated(false);
-  };
-
-  const setActiveTab = (tab: string) => {
-    setActiveTabState(tab);
-    setMobileMenuOpen(false); // Close mobile drawer upon navigation
-  };
-
-  const openModal = (type: string, data?: any) => {
-    setActiveModal({ type, data });
-  };
-
-  const closeModal = () => {
+    setCurrentAccountId(null);
     setActiveModal(null);
-  };
-
-  const viewReceipt = (receipt: PaymentReceipt) => {
-    setSelectedReceiptForView(receipt);
-  };
-
-  const closeReceiptView = () => {
     setSelectedReceiptForView(null);
   };
 
-  // Actions
+  // ---------- CRM ----------
+  const pickCounselor = (targetCourse: string): Counselor => {
+    const category = coursesRaw.find(c => c.name === targetCourse || targetCourse.startsWith(c.name.split(' (')[0]))?.category;
+    const eligible = counselors.filter(c => !category || c.specializations.includes(category));
+    const pool = eligible.length ? eligible : counselors;
+    // Least-loaded counselor among those who handle this course category.
+    return [...pool].sort((a, b) => a.activeLeadsCount - b.activeLeadsCount)[0];
+  };
+
   const addLead = (leadData: Partial<Lead>): Lead => {
-    const counselor = counselors[leads.length % counselors.length] || counselors[0];
+    const targetCourse = leadData.targetCourse || coursesRaw[0]?.name || '';
+    const counselor = pickCounselor(targetCourse);
     const newLead: Lead = {
       id: `lead-${Date.now()}`,
       studentName: leadData.studentName || 'New Aspirant',
-      phone: leadData.phone || '+91 98000 00000',
-      email: leadData.email || 'enquiry@example.com',
-      targetExamYear: leadData.targetExamYear || '2026',
-      targetCourse: leadData.targetCourse || courses[0]?.name || 'UPSC CSE 2026 Foundation',
+      phone: leadData.phone || '',
+      email: leadData.email || '',
+      targetExamYear: leadData.targetExamYear || String(new Date().getFullYear() + 1),
+      targetCourse,
       source: leadData.source || 'website',
       status: 'new',
       assignedCounselorId: counselor.id,
       assignedCounselorName: counselor.name,
       createdAt: new Date().toISOString(),
-      location: leadData.location || 'Chennai',
+      location: leadData.location || '',
       notes: leadData.notes || '',
       fieldAgentName: leadData.fieldAgentName,
       followUps: []
     };
-
     setLeads(prev => [newLead, ...prev]);
-
-    setCounselors(prev =>
-      prev.map(c => (c.id === counselor.id ? { ...c, activeLeadsCount: c.activeLeadsCount + 1 } : c))
-    );
-
     return newLead;
   };
 
@@ -408,21 +526,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLeads(prev =>
       prev.map(l => {
         if (l.id !== leadId) return l;
-        const updatedFollowUps = [...l.followUps];
-        if (notes) {
-          updatedFollowUps.push({
-            id: `fu-${Date.now()}`,
-            timestamp: new Date().toISOString(),
-            counselorName: currentUser.name,
-            notes,
-            statusUpdate: status
-          });
-        }
-        return {
-          ...l,
-          status,
-          followUps: updatedFollowUps
-        };
+        const followUps = notes
+          ? [...l.followUps, { id: `fu-${Date.now()}`, timestamp: new Date().toISOString(), counselorName: currentUser.name, notes, statusUpdate: status }]
+          : l.followUps;
+        return { ...l, status, followUps };
       })
     );
   };
@@ -438,210 +545,121 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           consultationDate: nextDate ? new Date(nextDate).toISOString() : l.consultationDate,
           followUps: [
             ...l.followUps,
-            {
-              id: `fu-${Date.now()}`,
-              timestamp: new Date().toISOString(),
-              counselorName: currentUser.name,
-              notes,
-              nextFollowUpDate: nextDate,
-              statusUpdate: newStatus
-            }
+            { id: `fu-${Date.now()}`, timestamp: new Date().toISOString(), counselorName: currentUser.name, notes, nextFollowUpDate: nextDate, statusUpdate: newStatus }
           ]
         };
       })
     );
   };
 
-  const convertLeadToAdmission = (data: {
-    leadId?: string;
-    studentName: string;
-    email: string;
-    phone: string;
-    gender: string;
-    address: string;
-    guardianName: string;
-    guardianPhone: string;
-    courseId: string;
-    batchId: string;
-    scholarship: ScholarshipType;
-    customDiscountAmount?: number;
-    paymentPlan: PaymentPlanType;
-    paymentMethod: 'UPI' | 'Credit/Debit Card' | 'NetBanking' | 'Demand Draft' | 'Cash';
-    advancePaymentAmount: number;
-    transactionRef?: string;
-  }) => {
-    const course = courses.find(c => c.id === data.courseId) || courses[0];
-    const batch = batches.find(b => b.id === data.batchId) || batches[0];
-    
-    const baseFee = course.totalFee;
-    let discountAmount = 0;
-    if (data.scholarship === 'merit_25') {
-      discountAmount = Math.round(baseFee * 0.25);
-    } else if (data.scholarship === 'ews_rural_40') {
-      discountAmount = Math.round(baseFee * 0.40);
-    } else if (data.scholarship === 'full_lump_sum_10') {
-      discountAmount = Math.round(baseFee * 0.10);
-    } else if (data.scholarship === 'custom' && data.customDiscountAmount) {
-      discountAmount = data.customDiscountAmount;
-    }
+  // ---------- admissions ----------
+  const convertLeadToAdmission = (data: AdmissionInput) => {
+    const course = coursesRaw.find(c => c.id === data.courseId);
+    const batch = batches.find(b => b.id === data.batchId);
+    if (!course || !batch) throw new Error('Select a valid course and batch.');
+    if (batch.enrolledCount >= batch.maxCapacity) throw new Error(`${batch.name} is full (${batch.maxCapacity} seats).`);
 
-    const netFee = baseFee - discountAmount;
-    const advancePaid = Math.min(data.advancePaymentAmount, netFee);
-    const balanceFee = netFee - advancePaid;
+    const discountAmount = computeDiscount(course.totalFee, data.scholarship, data.customDiscountAmount);
+    const netFee = course.totalFee - discountAmount;
+    const advance = Math.round(Math.min(data.advancePaymentAmount, netFee));
+    if (advance <= 0) throw new Error('An advance payment is required to confirm admission.');
 
-    const rollSuffix = Math.floor(100 + Math.random() * 900);
-    const rollNumber = `VRM-2026-${rollSuffix}`;
+    const rollNumber = nextSequence(studentsRaw.map(s => s.rollNumber), 'VRM-2026-', 3);
     const studentId = `stu-${Date.now()}`;
+    const admissionDate = today;
 
     const newStudent: Student = {
       id: studentId,
       rollNumber,
-      name: data.studentName,
-      email: data.email,
-      phone: data.phone,
-      gender: data.gender || 'Not Specified',
-      address: data.address || 'Chennai',
+      name: data.studentName.trim(),
+      email: data.email.trim(),
+      phone: data.phone.trim(),
+      gender: data.gender || 'Not specified',
+      address: data.address,
       enrolledCourseId: course.id,
       enrolledCourseName: course.name,
       enrolledBatchId: batch.id,
       enrolledBatchName: batch.name,
-      admissionDate: new Date().toISOString().split('T')[0],
-      totalFee: baseFee,
+      admissionDate,
+      totalFee: course.totalFee,
       scholarshipApplied: data.scholarship,
       discountAmount,
       netFee,
-      paidFee: advancePaid,
-      balanceFee,
+      paidFee: 0,
+      balanceFee: netFee,
       paymentPlan: data.paymentPlan,
-      attendancePercentage: 100.0,
+      attendancePercentage: 100,
       averageTestScore: 0,
       portalUsername: rollNumber,
       status: 'active',
-      guardianName: data.guardianName || 'Guardian',
+      guardianName: data.guardianName,
       guardianPhone: data.guardianPhone || data.phone
     };
 
-    const invoiceList: Invoice[] = [];
-    const invoice1Id = `inv-${Date.now()}-1`;
+    // Invoices for each installment, numbered sequentially across the academy.
+    const existingInvoiceNumbers = invoicesRaw.map(i => i.invoiceNumber);
+    const plan = buildInstallmentSchedule(netFee, data.paymentPlan, admissionDate);
+    const newInvoices: Invoice[] = plan.map((inst, idx) => {
+      const invoiceNumber = nextSequence(existingInvoiceNumbers, 'VRM/INV/2026/');
+      existingInvoiceNumbers.push(invoiceNumber);
+      return {
+        id: `inv-${studentId}-${idx + 1}`,
+        invoiceNumber,
+        studentId,
+        studentName: newStudent.name,
+        studentRollNumber: rollNumber,
+        courseName: course.name,
+        installmentIndex: idx + 1,
+        totalInstallments: plan.length,
+        amount: inst.amount,
+        dueDate: inst.dueDate,
+        status: 'pending',
+        paidAmount: 0
+      };
+    });
+
     const receiptId = `rcpt-${Date.now()}`;
+    const { updated, allocations } = allocatePayment(newInvoices, advance, admissionDate, receiptId);
 
-    if (data.paymentPlan === 'one_time') {
-      invoiceList.push({
-        id: invoice1Id,
-        invoiceNumber: `VRM-INV-2026-${rollSuffix}-1`,
-        studentId,
-        studentName: data.studentName,
-        studentRollNumber: rollNumber,
-        courseName: course.name,
-        installmentIndex: 1,
-        totalInstallments: 1,
-        amount: netFee,
-        dueDate: new Date().toISOString().split('T')[0],
-        status: advancePaid >= netFee ? 'paid' : 'pending',
-        paidDate: advancePaid >= netFee ? new Date().toISOString().split('T')[0] : undefined,
-        receiptId: advancePaid > 0 ? receiptId : undefined
-      });
-    } else if (data.paymentPlan === 'two_installments') {
-      const half = Math.round(netFee / 2);
-      invoiceList.push({
-        id: invoice1Id,
-        invoiceNumber: `VRM-INV-2026-${rollSuffix}-1`,
-        studentId,
-        studentName: data.studentName,
-        studentRollNumber: rollNumber,
-        courseName: course.name,
-        installmentIndex: 1,
-        totalInstallments: 2,
-        amount: half,
-        dueDate: new Date().toISOString().split('T')[0],
-        status: advancePaid >= half ? 'paid' : 'pending',
-        paidDate: advancePaid >= half ? new Date().toISOString().split('T')[0] : undefined,
-        receiptId: advancePaid > 0 ? receiptId : undefined
-      });
-      invoiceList.push({
-        id: `inv-${Date.now()}-2`,
-        invoiceNumber: `VRM-INV-2026-${rollSuffix}-2`,
-        studentId,
-        studentName: data.studentName,
-        studentRollNumber: rollNumber,
-        courseName: course.name,
-        installmentIndex: 2,
-        totalInstallments: 2,
-        amount: netFee - half,
-        dueDate: '2026-12-15',
-        status: 'pending'
-      });
-    } else {
-      const third = Math.round(netFee / 3);
-      invoiceList.push({
-        id: invoice1Id,
-        invoiceNumber: `VRM-INV-2026-${rollSuffix}-1`,
-        studentId,
-        studentName: data.studentName,
-        studentRollNumber: rollNumber,
-        courseName: course.name,
-        installmentIndex: 1,
-        totalInstallments: 3,
-        amount: third,
-        dueDate: new Date().toISOString().split('T')[0],
-        status: advancePaid >= third ? 'paid' : 'pending',
-        paidDate: advancePaid >= third ? new Date().toISOString().split('T')[0] : undefined,
-        receiptId: advancePaid > 0 ? receiptId : undefined
-      });
-      invoiceList.push({
-        id: `inv-${Date.now()}-2`,
-        invoiceNumber: `VRM-INV-2026-${rollSuffix}-2`,
-        studentId,
-        studentName: data.studentName,
-        studentRollNumber: rollNumber,
-        courseName: course.name,
-        installmentIndex: 2,
-        totalInstallments: 3,
-        amount: third,
-        dueDate: '2026-11-20',
-        status: 'pending'
-      });
-      invoiceList.push({
-        id: `inv-${Date.now()}-3`,
-        invoiceNumber: `VRM-INV-2026-${rollSuffix}-3`,
-        studentId,
-        studentName: data.studentName,
-        studentRollNumber: rollNumber,
-        courseName: course.name,
-        installmentIndex: 3,
-        totalInstallments: 3,
-        amount: netFee - (third * 2),
-        dueDate: '2027-01-20',
-        status: 'pending'
-      });
-    }
-
-    const newReceipt: PaymentReceipt = {
+    const receipt: PaymentReceipt = {
       id: receiptId,
-      receiptNumber: `VRM-RCPT-2026-${rollSuffix}`,
-      invoiceId: invoice1Id,
+      receiptNumber: nextSequence(receipts.map(r => r.receiptNumber), 'VRM/RCPT/2026/'),
+      invoiceId: newInvoices[0].id,
       studentId,
-      studentName: data.studentName,
+      studentName: newStudent.name,
       studentRollNumber: rollNumber,
       courseName: course.name,
       batchName: batch.name,
-      amountPaid: advancePaid,
+      installmentDescription: 'Admission advance (Installment 1)',
+      amountPaid: advance,
       paymentMethod: data.paymentMethod,
-      transactionReference: data.transactionRef || `TXN-VRM-${Date.now().toString().slice(-8)}`,
-      paidAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
-      receivedBy: 'P. Sangeetha (Finance Controller)',
-      notes: 'Admission enrollment confirmed. Digital classroom ID and LMS credentials activated.'
+      transactionReference: data.transactionRef || `TXN${Date.now().toString().slice(-9)}`,
+      paidAt: nowDisplay(),
+      paidOn: today,
+      receivedBy: `${currentUser.name} (${currentUser.designation})`,
+      notes: 'Admission confirmed. Student added to the class roster and portal login created.',
+      status: 'verified',
+      allocations
+    };
+
+    const credentials: Credentials = { username: rollNumber, password: studentDefaultPassword(newStudent.phone) };
+    const account: UserAccount = {
+      id: `acc-${studentId}`,
+      username: credentials.username,
+      password: credentials.password,
+      role: 'student',
+      name: newStudent.name,
+      email: newStudent.email,
+      phone: newStudent.phone,
+      designation: `Enrolled Aspirant (Roll: ${rollNumber})`,
+      linkedStudentId: studentId,
+      createdAt: admissionDate
     };
 
     setStudents(prev => [newStudent, ...prev]);
-    setInvoices(prev => [...invoiceList, ...prev]);
-    if (advancePaid > 0) {
-      setReceipts(prev => [newReceipt, ...prev]);
-    }
-
-    setBatches(prev =>
-      prev.map(b => (b.id === batch.id ? { ...b, enrolledCount: b.enrolledCount + 1 } : b))
-    );
+    setInvoices(prev => [...updated, ...prev]);
+    setReceipts(prev => [receipt, ...prev]);
+    setAccounts(prev => [...prev, account]);
 
     if (data.leadId) {
       setLeads(prev =>
@@ -651,13 +669,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 ...l,
                 status: 'converted',
                 convertedStudentId: studentId,
+                convertedAt: admissionDate,
                 followUps: [
                   ...l.followUps,
                   {
                     id: `fu-${Date.now()}`,
                     timestamp: new Date().toISOString(),
                     counselorName: currentUser.name,
-                    notes: `Lead successfully converted! Enrolled as ${newStudent.name} (${rollNumber}) in ${batch.name}. Advance fee ₹${advancePaid.toLocaleString('en-IN')} collected.`,
+                    notes: `Converted: enrolled as ${newStudent.name} (${rollNumber}) in ${batch.name}. Advance ₹${advance.toLocaleString('en-IN')} collected.`,
                     statusUpdate: 'converted'
                   }
                 ]
@@ -665,380 +684,297 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             : l
         )
       );
-      setCounselors(prev =>
-        prev.map(c =>
-          c.name === currentUser.name || c.id === 'csl-01'
-            ? { ...c, conversionsThisMonth: c.conversionsThisMonth + 1 }
-            : c
-        )
-      );
     }
 
-    return { student: newStudent, receipt: newReceipt };
+    return { student: { ...newStudent, paidFee: advance, balanceFee: netFee - advance }, receipt, credentials };
   };
 
   const addCourse = (courseData: Omit<Course, 'id' | 'activeBatchesCount'>) => {
-    const newCourse: Course = {
-      ...courseData,
-      id: `crs-${Date.now()}`,
-      activeBatchesCount: 0
-    };
-    setCourses(prev => [...prev, newCourse]);
+    setCourses(prev => [...prev, { ...courseData, id: `crs-${Date.now()}`, activeBatchesCount: 0 }]);
   };
 
   const addBatch = (batchData: Omit<Batch, 'id' | 'enrolledCount'>) => {
-    const newBatch: Batch = {
-      ...batchData,
-      id: `batch-${Date.now()}`,
-      enrolledCount: 0
-    };
-    setBatches(prev => [...prev, newBatch]);
-    setCourses(prev =>
-      prev.map(c => (c.id === batchData.courseId ? { ...c, activeBatchesCount: c.activeBatchesCount + 1 } : c))
-    );
+    setBatches(prev => [...prev, { ...batchData, id: `batch-${Date.now()}`, enrolledCount: 0 }]);
   };
 
-  const recordBatchAttendance = (
-    batchId: string,
-    _date: string,
-    _subject: string,
-    records: { studentId: string; studentName: string; rollNumber: string; status: 'present' | 'absent' | 'late' }[]
-  ) => {
-    setStudents(prev =>
-      prev.map(s => {
-        const rec = records.find(r => r.studentId === s.id);
-        if (!rec) return s;
-        let delta = 0;
-        if (rec.status === 'present') delta = 0.5;
-        else if (rec.status === 'absent') delta = -1.2;
-        const newPct = Math.min(100, Math.max(50, Math.round((s.attendancePercentage + delta) * 10) / 10));
-        return {
-          ...s,
-          attendancePercentage: newPct
-        };
-      })
-    );
+  // ---------- attendance ----------
+  const recordBatchAttendance: AppContextType['recordBatchAttendance'] = (batchId, date, subject, records) => {
+    const session: AttendanceSession = {
+      id: `att-${batchId}-${date}`,
+      date,
+      batchId,
+      subject,
+      facultyName: currentUser.name,
+      absentIds: records.filter(r => r.status === 'absent').map(r => r.studentId),
+      lateIds: records.filter(r => r.status === 'late').map(r => r.studentId)
+    };
+    // One session per batch per day: re-submitting corrects the earlier entry.
+    setAttendance(prev => [...prev.filter(s => s.id !== session.id), session]);
+  };
+
+  const getSessionStatuses = (batchId: string, date: string) => {
+    const session = attendance.find(s => s.batchId === batchId && s.date === date);
+    if (!session) return null;
+    const result: Record<string, 'present' | 'absent' | 'late'> = {};
+    for (const s of studentsRaw.filter(x => x.enrolledBatchId === batchId)) {
+      result[s.id] = session.absentIds.includes(s.id) ? 'absent' : session.lateIds.includes(s.id) ? 'late' : 'present';
+    }
+    return result;
   };
 
   const addStudyMaterial = (matData: Omit<StudyMaterial, 'id' | 'uploadedAt'>) => {
-    const newMat: StudyMaterial = {
-      ...matData,
-      id: `mat-${Date.now()}`,
-      uploadedAt: new Date().toISOString().split('T')[0]
-    };
-    setMaterials(prev => [newMat, ...prev]);
+    setMaterials(prev => [{ ...matData, id: `mat-${Date.now()}`, uploadedAt: today }, ...prev]);
   };
 
-  const submitTestAttempt = (attemptData: Omit<StudentTestAttempt, 'id' | 'attemptedAt'>): StudentTestAttempt => {
-    const newAttempt: StudentTestAttempt = {
-      ...attemptData,
-      id: `att-${Date.now()}`,
-      attemptedAt: new Date().toISOString()
-    };
-    setStudentAttempts(prev => [newAttempt, ...prev]);
-
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id !== attemptData.studentId) return s;
-        const currentAvg = s.averageTestScore || 0;
-        const newAvg = currentAvg > 0 ? Math.round(((currentAvg + attemptData.score) / 2) * 10) / 10 : attemptData.score;
-        return {
-          ...s,
-          averageTestScore: newAvg
-        };
-      })
-    );
-
-    return newAttempt;
-  };
-
-  const recordFeePayment = (
-    invoiceId: string,
-    amount: number,
-    paymentMethod: 'UPI' | 'Credit/Debit Card' | 'NetBanking' | 'Demand Draft' | 'Cash',
-    notes?: string
-  ): PaymentReceipt => {
-    const invoice = invoices.find(inv => inv.id === invoiceId);
-    const student = students.find(s => s.id === invoice?.studentId);
-    const receiptId = `rcpt-${Date.now()}`;
-    const rollSuffix = student?.rollNumber.split('-')[2] || '089';
-
-    const newReceipt: PaymentReceipt = {
-      id: receiptId,
-      receiptNumber: `VRM-RCPT-2026-${rollSuffix}-${Date.now().toString().slice(-4)}`,
-      invoiceId,
-      studentId: invoice?.studentId || 'stu-01',
-      studentName: invoice?.studentName || 'Student',
-      studentRollNumber: invoice?.studentRollNumber || 'VRM-2026-089',
-      courseName: invoice?.courseName || 'UPSC Foundation',
-      batchName: student?.enrolledBatchName || 'Morning Regular Batch',
-      amountPaid: amount,
-      paymentMethod,
-      transactionReference: `TXN-VRM-${Date.now().toString().slice(-8)}`,
-      paidAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
-      receivedBy: `${currentUser.name} (${currentUser.designation})`,
-      notes: notes || 'Installment fee cleared successfully.'
-    };
-
-    setInvoices(prev =>
-      prev.map(inv =>
-        inv.id === invoiceId
-          ? {
-              ...inv,
-              status: 'paid',
-              paidDate: new Date().toISOString().split('T')[0],
-              receiptId
-            }
-          : inv
-      )
-    );
-
-    if (student) {
-      setStudents(prev =>
-        prev.map(s =>
-          s.id === student.id
-            ? {
-                ...s,
-                paidFee: s.paidFee + amount,
-                balanceFee: Math.max(0, s.balanceFee - amount)
-              }
-            : s
-        )
-      );
-    }
-
-    setReceipts(prev => [newReceipt, ...prev]);
-    return newReceipt;
-  };
-
-  // Direct Fee Payment Logger (for Student portal or Admin/Management desk)
-  const recordDirectFeePayment = (data: {
-    studentId: string;
-    amount: number;
-    paymentMethod: PaymentReceipt['paymentMethod'];
-    installmentDescription?: string;
-    notes?: string;
-    transactionReference?: string;
-  }): PaymentReceipt => {
-    const student = students.find(s => s.id === data.studentId);
-    const rollSuffix = student?.rollNumber.split('-')[2] || '089';
-    const receiptNum = `VRM-RCPT-2026-${rollSuffix}-${Date.now().toString().slice(-4)}`;
-    
-    const newReceipt: PaymentReceipt = {
-      id: `rcpt-${Date.now()}`,
-      receiptNumber: receiptNum,
-      invoiceId: `inv-direct-${Date.now()}`,
-      studentId: data.studentId,
-      studentName: student?.name || 'Enrolled Student',
-      studentRollNumber: student?.rollNumber || 'VRM-2026-089',
-      courseName: student?.enrolledCourseName || 'UPSC CSE GS Foundation',
-      batchName: student?.enrolledBatchName || 'Morning Regular Batch',
-      installmentDescription: data.installmentDescription || 'Tuition Fee Remittance',
-      amountPaid: data.amount,
-      paymentMethod: data.paymentMethod,
-      transactionReference: data.transactionReference || `TXN-VRM-${Date.now().toString().slice(-8)}`,
-      paidAt: new Date().toLocaleDateString('en-IN', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      }),
-      receivedBy: `${currentUser.name} (${currentUser.designation})`,
-      notes: data.notes || 'Payment recorded and officially verified.',
-      status: 'verified'
-    };
-
-    setReceipts(prev => [newReceipt, ...prev]);
-
-    if (student) {
-      setStudents(prev =>
-        prev.map(s => {
-          if (s.id === data.studentId) {
-            const newPaid = s.paidFee + data.amount;
-            const newBalance = Math.max(0, s.netFee - newPaid);
-            return {
-              ...s,
-              paidFee: newPaid,
-              balanceFee: newBalance
-            };
-          }
-          return s;
-        })
-      );
-    }
-
-    return newReceipt;
-  };
-
-  // Question Bank Operations
+  // ---------- question bank & tests ----------
   const addQuestionToBank = (qData: Omit<Question, 'id'>): Question => {
-    const newQuestion: Question = {
-      ...qData,
-      id: `qb-${Date.now()}`,
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-    setQuestionBank(prev => [newQuestion, ...prev]);
-    return newQuestion;
+    const q: Question = { ...qData, id: `qb-${Date.now()}`, createdAt: today };
+    setQuestionBank(prev => [q, ...prev]);
+    return q;
   };
-
-  const updateQuestionInBank = (questionId: string, updated: Partial<Question>) => {
+  const updateQuestionInBank = (questionId: string, updated: Partial<Question>) =>
     setQuestionBank(prev => prev.map(q => (q.id === questionId ? { ...q, ...updated } : q)));
-  };
+  const deleteQuestionFromBank = (questionId: string) => setQuestionBank(prev => prev.filter(q => q.id !== questionId));
 
-  const deleteQuestionFromBank = (questionId: string) => {
-    setQuestionBank(prev => prev.filter(q => q.id !== questionId));
-  };
-
-  const createTestFromQuestionBank = (data: {
-    title: string;
-    code: string;
-    subject: string;
-    category: AssessmentTest['category'];
-    durationMinutes: number;
-    batchIds: string[];
-    questionIds: string[];
-    negativeMarksPerWrong?: number;
-  }): AssessmentTest => {
-    const selectedQuestions = questionBank.filter(q => data.questionIds.includes(q.id));
-    const totalMarks = selectedQuestions.reduce((sum, q) => sum + (q.marks || 2), 0);
-    const newTest: AssessmentTest = {
+  const createTestFromQuestionBank: AppContextType['createTestFromQuestionBank'] = data => {
+    const selected = questionBank.filter(q => data.questionIds.includes(q.id));
+    const test: AssessmentTest = {
       id: `test-${Date.now()}`,
       title: data.title,
       code: data.code,
       subject: data.subject,
       category: data.category,
-      totalMarks,
+      totalMarks: Math.round(selected.reduce((sum, q) => sum + (q.marks || 2), 0) * 100) / 100,
       durationMinutes: data.durationMinutes,
-      questionsCount: selectedQuestions.length,
-      questions: selectedQuestions,
+      questionsCount: selected.length,
+      questions: selected,
       negativeMarksPerWrong: data.negativeMarksPerWrong ?? (data.subject.toLowerCase().includes('csat') ? 0.83 : 0.66),
-      scheduledDate: new Date().toISOString().split('T')[0],
+      scheduledDate: today,
       batchIds: data.batchIds
     };
-
-    setAssessmentTests(prev => [newTest, ...prev]);
-    return newTest;
+    setAssessmentTests(prev => [test, ...prev]);
+    return test;
   };
 
-  const addExamAlert = (alertData: Omit<ExamAlert, 'id'>) => {
-    const newAlert: ExamAlert = {
-      ...alertData,
-      id: `alert-${Date.now()}`
+  const submitTestAttempt = (attemptData: Omit<StudentTestAttempt, 'id' | 'attemptedAt'>): StudentTestAttempt => {
+    const student = studentsRaw.find(s => s.id === attemptData.studentId);
+    const peers = studentAttempts.filter(
+      a => a.testId === attemptData.testId && studentsRaw.find(s => s.id === a.studentId)?.enrolledBatchId === student?.enrolledBatchId
+    );
+    const rankInBatch = peers.filter(a => a.score > attemptData.score).length + 1;
+    const attempt: StudentTestAttempt = {
+      ...attemptData,
+      id: `att-${attemptData.testId}-${attemptData.studentId}-${Date.now()}`,
+      attemptedAt: new Date().toISOString(),
+      rankInBatch
     };
-    setExamAlerts(prev => [newAlert, ...prev]);
+    setStudentAttempts(prev => [attempt, ...prev]);
+    return attempt;
   };
 
-  const addAnnouncement = (annData: Omit<AcademyAnnouncement, 'id' | 'date'>) => {
-    const newAnn: AcademyAnnouncement = {
-      ...annData,
-      id: `ann-${Date.now()}`,
-      date: new Date().toISOString().split('T')[0]
+  // ---------- fees ----------
+  const studentOutstanding = (studentId: string) =>
+    invoicesRaw.filter(i => i.studentId === studentId).reduce((sum, i) => sum + invoiceBalance(i), 0);
+
+  const collectPayment = (
+    studentId: string,
+    amount: number,
+    paymentMethod: PaymentMethod,
+    opts: { preferredInvoiceId?: string; description?: string; notes?: string; transactionReference?: string }
+  ): PaymentReceipt => {
+    const student = studentsRaw.find(s => s.id === studentId);
+    const outstanding = studentOutstanding(studentId);
+    const charge = Math.round(Math.min(amount, outstanding));
+    if (!student || charge <= 0) throw new Error('Nothing is outstanding for this student.');
+
+    const receiptId = `rcpt-${Date.now()}`;
+    const studentInvoices = invoicesRaw.filter(i => i.studentId === studentId);
+    const { updated, allocations } = allocatePayment(studentInvoices, charge, today, receiptId, opts.preferredInvoiceId);
+    const updatedById = new Map(updated.map(i => [i.id, i]));
+
+    const describe = () => {
+      if (opts.description) return opts.description;
+      return allocations
+        .map(a => {
+          const inv = studentInvoices.find(i => i.id === a.invoiceId)!;
+          const full = a.amount >= invoiceBalance(inv);
+          return `${full ? '' : 'Part payment of '}Installment ${inv.installmentIndex} of ${inv.totalInstallments}`;
+        })
+        .join(' + ');
     };
-    setAnnouncements(prev => [newAnn, ...prev]);
+
+    const receipt: PaymentReceipt = {
+      id: receiptId,
+      receiptNumber: nextSequence(receipts.map(r => r.receiptNumber), 'VRM/RCPT/2026/'),
+      invoiceId: allocations[0]?.invoiceId || studentInvoices[0]?.id || '',
+      studentId,
+      studentName: student.name,
+      studentRollNumber: student.rollNumber,
+      courseName: student.enrolledCourseName,
+      batchName: student.enrolledBatchName,
+      installmentDescription: describe(),
+      amountPaid: charge,
+      paymentMethod,
+      transactionReference: opts.transactionReference || `TXN${Date.now().toString().slice(-9)}`,
+      paidAt: nowDisplay(),
+      paidOn: today,
+      receivedBy:
+        role === 'student' ? 'Online Payment Gateway (auto-verified)' : `${currentUser.name} (${currentUser.designation})`,
+      notes: opts.notes || 'Payment received.',
+      status: 'verified',
+      allocations
+    };
+
+    setInvoices(prev => prev.map(i => updatedById.get(i.id) || i));
+    setReceipts(prev => [receipt, ...prev]);
+    return receipt;
   };
 
-  const createSupportTicket = (ticketData: {
-    studentOrStaffId: string;
-    userName: string;
-    userRole: UserRole;
-    category: SupportTicket['category'];
-    subject: string;
-    description: string;
-    priority: SupportTicket['priority'];
-  }): SupportTicket => {
-    const newTicket: SupportTicket = {
+  const recordFeePayment: AppContextType['recordFeePayment'] = (invoiceId, amount, paymentMethod, notes) => {
+    const inv = invoicesRaw.find(i => i.id === invoiceId);
+    if (!inv) throw new Error('Invoice not found.');
+    return collectPayment(inv.studentId, amount, paymentMethod, { preferredInvoiceId: invoiceId, notes });
+  };
+
+  const recordDirectFeePayment: AppContextType['recordDirectFeePayment'] = data =>
+    collectPayment(data.studentId, data.amount, data.paymentMethod, {
+      description: data.installmentDescription,
+      notes: data.notes,
+      transactionReference: data.transactionReference
+    });
+
+  // ---------- communication & support ----------
+  const addExamAlert = (alertData: Omit<ExamAlert, 'id'>) => setExamAlerts(prev => [{ ...alertData, id: `alert-${Date.now()}` }, ...prev]);
+  const addAnnouncement = (annData: Omit<AcademyAnnouncement, 'id' | 'date'>) =>
+    setAnnouncements(prev => [{ ...annData, id: `ann-${Date.now()}`, date: today }, ...prev]);
+
+  const createSupportTicket: AppContextType['createSupportTicket'] = ticketData => {
+    const stamp = new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' });
+    const ticket: SupportTicket = {
       id: `tkt-${Date.now()}`,
-      ticketNumber: `TKT-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      ticketNumber: nextSequence(tickets.map(t => t.ticketNumber), 'TKT-2026-', 4),
       ...ticketData,
       status: 'open',
-      createdAt: new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }),
-      lastUpdated: new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }),
-      messages: [
-        {
-          sender: ticketData.userName,
-          isStaff: ticketData.userRole !== 'student',
-          timestamp: new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }),
-          text: ticketData.description
-        }
-      ]
+      createdAt: stamp,
+      lastUpdated: stamp,
+      messages: [{ sender: ticketData.userName, isStaff: ticketData.userRole !== 'student', timestamp: stamp, text: ticketData.description }]
     };
-
-    setTickets(prev => [newTicket, ...prev]);
-    return newTicket;
+    setTickets(prev => [ticket, ...prev]);
+    return ticket;
   };
 
   const replyToTicket = (ticketId: string, text: string, isStaff: boolean, senderName: string) => {
+    const stamp = new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' });
     setTickets(prev =>
-      prev.map(t => {
-        if (t.id !== ticketId) return t;
-        return {
-          ...t,
-          status: isStaff && t.status === 'open' ? 'in_progress' : t.status,
-          lastUpdated: new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }),
-          messages: [
-            ...t.messages,
-            {
-              sender: senderName,
-              isStaff,
-              timestamp: new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }),
-              text
+      prev.map(t =>
+        t.id !== ticketId
+          ? t
+          : {
+              ...t,
+              status: isStaff && t.status === 'open' ? 'in_progress' : t.status,
+              lastUpdated: stamp,
+              messages: [...t.messages, { sender: senderName, isStaff, timestamp: stamp, text }]
             }
-          ]
-        };
-      })
+      )
     );
   };
 
-  const updateTicketStatus = (ticketId: string, status: SupportTicket['status']) => {
-    setTickets(prev =>
-      prev.map(t => (t.id === ticketId ? { ...t, status, lastUpdated: new Date().toLocaleString('en-IN') } : t))
-    );
-  };
+  const updateTicketStatus = (ticketId: string, status: SupportTicket['status']) =>
+    setTickets(prev => prev.map(t => (t.id === ticketId ? { ...t, status, lastUpdated: new Date().toLocaleString('en-IN') } : t)));
 
+  // ---------- staff ----------
   const addStaffMember = (staffData: Omit<StaffMember, 'id' | 'attendanceRate'>) => {
-    const newStaff: StaffMember = {
-      ...staffData,
-      id: `staff-${Date.now()}`,
-      attendanceRate: 98.0
+    const staff: StaffMember = { ...staffData, id: `stf-${Date.now()}`, attendanceRate: 100 };
+    const credentials: Credentials = {
+      username: staffData.email.trim().toLowerCase(),
+      password: `Staff@${staffData.phone.replace(/\D/g, '').slice(-4) || '0000'}`
     };
-    setStaffMembers(prev => [...prev, newStaff]);
+    const accountRole: UserRole =
+      staffData.department === 'Faculty' ? 'faculty' : staffData.department === 'Counseling' ? 'field_agent' : 'office_staff';
+    const account: UserAccount = {
+      id: `acc-${staff.id}`,
+      username: credentials.username,
+      password: credentials.password,
+      role: accountRole,
+      name: staff.name,
+      email: staff.email,
+      phone: staff.phone,
+      designation: staff.designation,
+      linkedStaffId: staff.id,
+      createdAt: today
+    };
+    setStaffMembers(prev => [...prev, staff]);
+    setAccounts(prev => [...prev, account]);
+    if (staffData.department === 'Counseling') {
+      setCounselors(prev => [
+        ...prev,
+        {
+          id: `csl-${slug(staff.name)}`,
+          name: staff.name,
+          phone: staff.phone,
+          email: staff.email,
+          activeLeadsCount: 0,
+          conversionsThisMonth: 0,
+          averageResponseMinutes: 0,
+          specializations: ['GS Foundation', 'CSAT', 'Optional Subject', 'State PSC', 'Test Series']
+        }
+      ]);
+    }
+    return { staff, credentials };
   };
 
+  const markStaffAttendance = (date: string, entries: { staffId: string; status: StaffAttendanceEntry['status'] }[]) => {
+    setStaffAttendance(prev => {
+      const ids = new Set(entries.map(e => `sa-${e.staffId}-${date}`));
+      return [...prev.filter(a => !ids.has(a.id)), ...entries.map(e => ({ id: `sa-${e.staffId}-${date}`, staffId: e.staffId, date, status: e.status }))];
+    });
+  };
+
+  // ---------- reset ----------
   const resetToDefaultData = () => {
-    localStorage.clear();
+    clearOwnStorage();
+    cachedSeed = buildSeed();
+    const seed = cachedSeed;
+    setAccounts(seed.accounts);
     setCourses(INITIAL_COURSES);
     setBatches(INITIAL_BATCHES);
-    setCounselors(INITIAL_COUNSELORS);
-    setLeads(INITIAL_LEADS);
-    setStudents(INITIAL_STUDENTS);
-    setInvoices(INITIAL_INVOICES);
-    setReceipts(INITIAL_RECEIPTS);
+    setCounselors(seed.counselors);
+    setLeads(seed.leads);
+    setStudents(seed.students);
+    setInvoices(seed.invoices);
+    setReceipts(seed.receipts);
     setSchedule(INITIAL_SCHEDULE);
+    setAttendance(seed.attendance);
     setMaterials(INITIAL_STUDY_MATERIALS);
-    setAssessmentTests(INITIAL_ASSESSMENT_TESTS);
+    setAssessmentTests(seed.assessmentTests);
     setQuestionBank(INITIAL_QUESTION_BANK);
-    setStudentAttempts(INITIAL_STUDENT_ATTEMPTS);
-    setStaffMembers(INITIAL_STAFF_MEMBERS);
-    setSalaryPayouts(INITIAL_SALARY_PAYOUTS);
+    setStudentAttempts(seed.studentAttempts);
+    setStaffMembers(seed.staffMembers);
+    setStaffAttendance(seed.staffAttendance);
+    setSalaryPayouts(seed.salaryPayouts);
     setExamAlerts(INITIAL_EXAM_ALERTS);
     setAnnouncements(INITIAL_ANNOUNCEMENTS);
     setTickets(INITIAL_TICKETS);
-    setRoleState('management');
-    setCurrentUser(INITIAL_USER_PROFILES.management);
-    setActiveTabState('crm');
-    setIsAuthenticated(true);
     setTheme('light');
+    // Stay signed in as the same account if it still exists after the reset.
+    const stillExists = seed.accounts.find(a => a.id === currentAccountId);
+    const account = stillExists || seed.accounts.find(a => a.id === DEMO_PERSONA_ACCOUNT_IDS.management)!;
+    setCurrentAccountId(account.id);
+    setActiveTabRaw(HOME_TAB[account.role]);
   };
 
-  const notificationCount = examAlerts.filter(a => a.status === 'active').length + announcements.length;
+  const notificationCount = visibleExamAlerts.filter(a => a.status === 'active').length + visibleAnnouncements.length;
 
   return (
     <AppContext.Provider
       value={{
         isAuthenticated,
         currentUser,
+        currentAccount,
         role,
+        currentStudent,
+        currentStaff,
+        accounts,
         login,
         quickLogin,
         logout,
@@ -1052,6 +988,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleFullscreen,
         activeTab,
         setActiveTab,
+        today,
         courses,
         batches,
         counselors,
@@ -1060,14 +997,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         invoices,
         receipts,
         schedule,
+        attendance,
         materials,
         assessmentTests,
         questionBank,
         studentAttempts,
         staffMembers,
+        staffAttendance,
         salaryPayouts,
         examAlerts,
         announcements,
+        visibleExamAlerts,
+        visibleAnnouncements,
         tickets,
         addLead,
         updateLeadStatus,
@@ -1076,6 +1017,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addCourse,
         addBatch,
         recordBatchAttendance,
+        getSessionStatuses,
         addStudyMaterial,
         addQuestionToBank,
         updateQuestionInBank,
@@ -1084,12 +1026,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         submitTestAttempt,
         recordFeePayment,
         recordDirectFeePayment,
+        studentOutstanding,
         addExamAlert,
         addAnnouncement,
         createSupportTicket,
         replyToTicket,
         updateTicketStatus,
         addStaffMember,
+        markStaffAttendance,
         resetToDefaultData,
         activeModal,
         openModal,
@@ -1107,8 +1051,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
 export const useApp = () => {
   const context = useContext(AppContext);
-  if (!context) {
-    throw new Error('useApp must be used within an AppProvider');
-  }
+  if (!context) throw new Error('useApp must be used within an AppProvider');
   return context;
 };

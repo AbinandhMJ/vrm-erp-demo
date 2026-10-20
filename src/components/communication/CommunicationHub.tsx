@@ -16,9 +16,9 @@ import {
 
 export const CommunicationHub: React.FC = () => {
   const {
-    examAlerts,
+    visibleExamAlerts: examAlerts,
     addExamAlert,
-    announcements,
+    visibleAnnouncements: announcements,
     addAnnouncement,
     role
   } = useApp();

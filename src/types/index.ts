@@ -1,5 +1,21 @@
 export type UserRole = 'management' | 'office_staff' | 'faculty' | 'student' | 'field_agent';
 
+/** A login account. Seeded for demo personas and every student/staff; auto-created at admission and staff onboarding. */
+export interface UserAccount {
+  id: string;
+  username: string; // roll number for students, email for staff
+  password: string; // demo only: stored in plain text in localStorage
+  role: UserRole;
+  name: string;
+  email: string;
+  phone: string;
+  designation: string;
+  linkedStudentId?: string;
+  linkedStaffId?: string;
+  linkedCounselorId?: string;
+  createdAt: string;
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -38,6 +54,7 @@ export interface Lead {
   notes?: string;
   followUps: FollowUpLog[];
   convertedStudentId?: string;
+  convertedAt?: string;
   fieldAgentName?: string;
   location?: string;
 }
@@ -50,6 +67,8 @@ export interface Counselor {
   activeLeadsCount: number;
   conversionsThisMonth: number;
   averageResponseMinutes: number;
+  /** Course categories this counselor handles; used for automatic lead assignment. */
+  specializations: Course['category'][];
 }
 
 export interface Course {
@@ -123,7 +142,9 @@ export interface Invoice {
   totalInstallments: number;
   amount: number;
   dueDate: string;
-  status: 'paid' | 'pending' | 'overdue';
+  /** Stored status is 'paid' | 'pending' | 'partially_paid'; 'overdue' is derived at read time from dueDate. */
+  status: 'paid' | 'pending' | 'partially_paid' | 'overdue';
+  paidAmount: number;
   paidDate?: string;
   receiptId?: string;
 }
@@ -142,9 +163,13 @@ export interface PaymentReceipt {
   paymentMethod: 'UPI' | 'Credit/Debit Card' | 'NetBanking' | 'Demand Draft' | 'Cash';
   transactionReference: string;
   paidAt: string;
+  /** Payment date as YYYY-MM-DD (for reporting). */
+  paidOn?: string;
   receivedBy: string;
   notes?: string;
   status?: 'verified' | 'reconciled';
+  /** How this payment was applied across the student's installment invoices. */
+  allocations?: { invoiceId: string; amount: number }[];
 }
 
 export interface ClassScheduleItem {
@@ -159,19 +184,25 @@ export interface ClassScheduleItem {
   room: string;
 }
 
-export interface AttendanceRecord {
+/**
+ * One class session's attendance. Stored compactly: every student on the batch roster
+ * (admitted on or before `date`) is present unless listed in absentIds / lateIds.
+ */
+export interface AttendanceSession {
   id: string;
-  date: string;
+  date: string; // YYYY-MM-DD
   batchId: string;
-  batchName: string;
   subject: string;
-  facultyId: string;
-  records: {
-    studentId: string;
-    studentName: string;
-    rollNumber: string;
-    status: 'present' | 'absent' | 'late';
-  }[];
+  facultyName: string;
+  absentIds: string[];
+  lateIds: string[];
+}
+
+export interface StaffAttendanceEntry {
+  id: string;
+  staffId: string;
+  date: string; // YYYY-MM-DD
+  status: 'present' | 'absent' | 'leave';
 }
 
 export interface StudyMaterial {

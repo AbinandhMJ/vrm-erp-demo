@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { formatDate } from '../../lib/dates';
+import { invoiceBalance } from '../../lib/fees';
 import { useApp } from '../../context/AppContext';
 import { Invoice, PaymentReceipt, Student } from '../../types';
 import {
@@ -31,6 +33,7 @@ export const FeeManagement: React.FC = () => {
     recordFeePayment,
     recordDirectFeePayment,
     viewReceipt,
+    studentOutstanding,
     role
   } = useApp();
 
@@ -51,13 +54,15 @@ export const FeeManagement: React.FC = () => {
   const [payMethod, setPayMethod] = useState<PaymentReceipt['paymentMethod']>('UPI');
   const [payNotes, setPayNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [collectAmount, setCollectAmount] = useState<number>(0);
+  const [payError, setPayError] = useState('');
 
   // Direct Payment Recording Modal (for Offline/Direct Tranches)
   const [isDirectPayModalOpen, setIsDirectPayModalOpen] = useState(false);
-  const [directPayStudentId, setDirectPayStudentId] = useState(students[0]?.id || '');
-  const [directPayAmount, setDirectPayAmount] = useState<number>(33750);
+  const [directPayStudentId, setDirectPayStudentId] = useState(students.find(s => s.balanceFee > 0)?.id || students[0]?.id || '');
+  const [directPayAmount, setDirectPayAmount] = useState<number>(students.find(s => s.balanceFee > 0)?.balanceFee || 0);
   const [directPayMethod, setDirectPayMethod] = useState<PaymentReceipt['paymentMethod']>('UPI');
-  const [directPayDescription, setDirectPayDescription] = useState('Tuition Installment Remittance');
+  const [directPayDescription, setDirectPayDescription] = useState('');
   const [directPayRef, setDirectPayRef] = useState('');
   const [directPayNotes, setDirectPayNotes] = useState('');
 
@@ -65,6 +70,15 @@ export const FeeManagement: React.FC = () => {
   const totalInvoiced = invoices.reduce((sum, inv) => sum + inv.amount, 0);
   const totalCollected = receipts.reduce((sum, r) => sum + r.amountPaid, 0);
   const totalOutstanding = students.reduce((sum, s) => sum + s.balanceFee, 0);
+  const overdueInvoices = invoices.filter(i => i.status === 'overdue');
+  const totalOverdue = overdueInvoices.reduce((sum, i) => sum + invoiceBalance(i), 0);
+  const overdueStudents = new Set(overdueInvoices.map(i => i.studentId)).size;
+
+  const openCollect = (inv: Invoice) => {
+    setSelectedInvoiceForPayment(inv);
+    setCollectAmount(invoiceBalance(inv));
+    setPayError('');
+  };
   const verifiedReceiptsCount = receipts.length;
 
   const selectedStudentFilterObj = students.find(s => s.id === studentFilter || s.rollNumber === studentFilter) || null;
@@ -91,9 +105,11 @@ export const FeeManagement: React.FC = () => {
       inv.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       inv.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       inv.studentRollNumber.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || inv.status === statusFilter;
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'open' ? inv.status !== 'paid' : inv.status === statusFilter);
     return matchesSearch && matchesStatus;
-  });
+  }).sort((a, b) => (statusFilter === 'overdue' || statusFilter === 'open' ? a.dueDate.localeCompare(b.dueDate) : 0));
 
   // Filtered Student Accounts
   const filteredStudents = students.filter(s => {
@@ -108,18 +124,28 @@ export const FeeManagement: React.FC = () => {
   const handleProcessInvoicePayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedInvoiceForPayment) return;
+    const outstanding = studentOutstanding(selectedInvoiceForPayment.studentId);
+    if (!collectAmount || collectAmount <= 0) {
+      setPayError('Enter the amount received.');
+      return;
+    }
+    if (collectAmount > outstanding) {
+      setPayError(`The student owes only ₹${outstanding.toLocaleString('en-IN')} in total.`);
+      return;
+    }
 
     setIsProcessing(true);
     setTimeout(() => {
       const generatedReceipt = recordFeePayment(
         selectedInvoiceForPayment.id,
-        selectedInvoiceForPayment.amount,
+        collectAmount,
         payMethod,
-        payNotes || `Fee remittance cleared for ${selectedInvoiceForPayment.invoiceNumber}`
+        payNotes || `Collected against ${selectedInvoiceForPayment.invoiceNumber}`
       );
 
       setIsProcessing(false);
       setSelectedInvoiceForPayment(null);
+      setPayNotes('');
       viewReceipt(generatedReceipt);
     }, 600);
   };
@@ -128,6 +154,16 @@ export const FeeManagement: React.FC = () => {
   const handleRecordDirectPayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!directPayStudentId || directPayAmount <= 0) return;
+    const outstanding = studentOutstanding(directPayStudentId);
+    if (outstanding <= 0) {
+      setPayError('This student has no outstanding fees.');
+      return;
+    }
+    if (directPayAmount > outstanding) {
+      setPayError(`The student owes only ₹${outstanding.toLocaleString('en-IN')}.`);
+      return;
+    }
+    setPayError('');
 
     setIsProcessing(true);
     setTimeout(() => {
@@ -135,13 +171,16 @@ export const FeeManagement: React.FC = () => {
         studentId: directPayStudentId,
         amount: Number(directPayAmount),
         paymentMethod: directPayMethod,
-        installmentDescription: directPayDescription,
+        installmentDescription: directPayDescription || undefined,
         notes: directPayNotes || 'Direct installment logged at finance counter.',
         transactionReference: directPayRef || undefined
       });
 
       setIsProcessing(false);
       setIsDirectPayModalOpen(false);
+      setDirectPayRef('');
+      setDirectPayNotes('');
+      setDirectPayDescription('');
       viewReceipt(newRcpt);
     }, 600);
   };
@@ -168,7 +207,7 @@ export const FeeManagement: React.FC = () => {
         {/* Quick Direct Payment Action for Admin & Management */}
         {role !== 'student' && (
           <button
-            onClick={() => setIsDirectPayModalOpen(true)}
+            onClick={() => { setPayError(""); setIsDirectPayModalOpen(true); }}
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 rounded-lg transition-colors shadow-2xs shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -200,15 +239,23 @@ export const FeeManagement: React.FC = () => {
           <div className="text-2xl font-mono font-bold text-rose-700 dark:text-rose-400 mt-1 tabular-nums">
             ₹{totalOutstanding.toLocaleString('en-IN')}
           </div>
-          <p className="text-[11px] text-slate-400 mt-0.5">Upcoming installments</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">All unpaid installments · {verifiedReceiptsCount} receipts issued</p>
         </div>
 
         <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">Verified Digital Receipts</span>
-          <div className="text-2xl font-mono font-bold text-blue-700 dark:text-blue-400 mt-1 tabular-nums">
-            {verifiedReceiptsCount} Issued
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">Overdue (Defaulters)</span>
+          <div className="text-2xl font-mono font-bold text-rose-700 dark:text-rose-400 mt-1 tabular-nums">
+            ₹{totalOverdue.toLocaleString('en-IN')}
           </div>
-          <p className="text-[11px] text-slate-400 mt-0.5">Audit-stamped & signed</p>
+          <button
+            onClick={() => {
+              setActiveTab('invoices');
+              setStatusFilter('overdue');
+            }}
+            className="text-[11px] text-rose-600 font-semibold mt-0.5 hover:underline"
+          >
+            {overdueStudents} students past due date →
+          </button>
         </div>
       </div>
 
@@ -692,11 +739,13 @@ export const FeeManagement: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg shrink-0">
+            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-x-auto">
               {[
-                { id: 'all', label: 'All Invoices' },
-                { id: 'paid', label: 'Paid & Cleared' },
-                { id: 'pending', label: 'Pending Due' }
+                { id: 'all', label: 'All' },
+                { id: 'open', label: 'Unpaid' },
+                { id: 'overdue', label: `Overdue (${overdueInvoices.length})` },
+                { id: 'partially_paid', label: 'Part-paid' },
+                { id: 'paid', label: 'Paid' }
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -730,7 +779,7 @@ export const FeeManagement: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {filteredInvoices.map(inv => {
-                    const receipt = receipts.find(r => r.invoiceId === inv.id);
+                    const receipt = receipts.find(r => r.allocations?.some(a => a.invoiceId === inv.id) || r.invoiceId === inv.id);
                     const isPaid = inv.status === 'paid';
 
                     return (
@@ -752,12 +801,15 @@ export const FeeManagement: React.FC = () => {
                           {inv.installmentIndex} of {inv.totalInstallments}
                         </td>
 
-                        <td className="px-4 py-3 font-mono text-slate-700 dark:text-slate-300">
-                          {inv.dueDate}
+                        <td className={`px-4 py-3 font-mono whitespace-nowrap ${inv.status === 'overdue' ? 'text-rose-600 font-bold' : 'text-slate-700 dark:text-slate-300'}`}>
+                          {formatDate(inv.dueDate)}
                         </td>
 
                         <td className="px-4 py-3 text-right font-mono font-bold text-slate-900 dark:text-white tabular-nums">
                           ₹{inv.amount.toLocaleString('en-IN')}
+                          {!isPaid && inv.paidAmount > 0 && (
+                            <div className="text-[10px] font-normal text-slate-500">₹{invoiceBalance(inv).toLocaleString('en-IN')} left</div>
+                          )}
                         </td>
 
                         <td className="px-4 py-3">
@@ -767,8 +819,14 @@ export const FeeManagement: React.FC = () => {
                               <span>Paid</span>
                             </span>
                           ) : (
-                            <span className="text-amber-800 dark:text-amber-300 font-semibold text-xs bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800">
-                              Pending Due
+                            <span
+                              className={`font-semibold text-xs px-2 py-0.5 rounded border whitespace-nowrap ${
+                                inv.status === 'overdue'
+                                  ? 'text-rose-800 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800'
+                                  : 'text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800'
+                              }`}
+                            >
+                              {inv.status === 'overdue' ? 'Overdue' : inv.status === 'partially_paid' ? 'Part-paid' : 'Upcoming'}
                             </span>
                           )}
                         </td>
@@ -784,7 +842,7 @@ export const FeeManagement: React.FC = () => {
                             </button>
                           ) : (
                             <button
-                              onClick={() => setSelectedInvoiceForPayment(inv)}
+                              onClick={() => openCollect(inv)}
                               className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-md transition-colors shadow-2xs"
                             >
                               <CreditCard className="w-3 h-3" />
@@ -949,8 +1007,9 @@ export const FeeManagement: React.FC = () => {
                               Installment {inv.installmentIndex} of {inv.totalInstallments}
                             </span>
                           </div>
-                          <span className="text-[11px] text-slate-400 font-mono">
-                            Due on {inv.dueDate}
+                          <span className={`text-[11px] font-mono ${inv.status === 'overdue' ? 'text-rose-600 font-semibold' : 'text-slate-400'}`}>
+                            {inv.status === 'overdue' ? 'Overdue since' : 'Due on'} {formatDate(inv.dueDate)}
+                            {!isPaid && inv.paidAmount > 0 && ` · ₹${invoiceBalance(inv).toLocaleString('en-IN')} left`}
                           </span>
                         </div>
 
@@ -965,7 +1024,7 @@ export const FeeManagement: React.FC = () => {
                           ) : (
                             <button
                               onClick={() => {
-                                setSelectedInvoiceForPayment(inv);
+                                openCollect(inv);
                                 setSelectedStudentForLedger(null);
                               }}
                               className="px-2.5 py-1 text-xs font-bold text-white bg-slate-900 dark:bg-amber-600 rounded-md"
@@ -1023,17 +1082,19 @@ export const FeeManagement: React.FC = () => {
                   onChange={e => {
                     setDirectPayStudentId(e.target.value);
                     const selected = students.find(s => s.id === e.target.value);
-                    if (selected && selected.balanceFee > 0) {
-                      setDirectPayAmount(selected.balanceFee);
-                    }
+                    setDirectPayAmount(selected?.balanceFee || 0);
+                    setPayError('');
                   }}
                   className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg focus:outline-none"
                 >
-                  {students.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.rollNumber}) · Balance Due: ₹{s.balanceFee.toLocaleString('en-IN')}
-                    </option>
-                  ))}
+                  {students
+                    .filter(s => s.balanceFee > 0)
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.rollNumber}) · Balance: ₹{s.balanceFee.toLocaleString('en-IN')}
+                      </option>
+                    ))}
                 </select>
               </div>
 
@@ -1044,8 +1105,7 @@ export const FeeManagement: React.FC = () => {
                   </label>
                   <input
                     type="number"
-                    min="500"
-                    step="500"
+                    min="1"
                     value={directPayAmount}
                     onChange={e => setDirectPayAmount(parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg font-mono font-bold"
@@ -1079,7 +1139,7 @@ export const FeeManagement: React.FC = () => {
                   type="text"
                   value={directPayDescription}
                   onChange={e => setDirectPayDescription(e.target.value)}
-                  placeholder="e.g. Tuition Tranche 2 of 2 or Optional Subject Balance"
+                  placeholder="Optional: filled in automatically from the installments paid"
                   className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
                 />
               </div>
@@ -1109,6 +1169,10 @@ export const FeeManagement: React.FC = () => {
                   className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
                 />
               </div>
+
+              {payError && (
+                <div className="p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded text-rose-700 dark:text-rose-300">{payError}</div>
+              )}
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button
@@ -1164,15 +1228,37 @@ export const FeeManagement: React.FC = () => {
                   {selectedInvoiceForPayment.installmentIndex} of {selectedInvoiceForPayment.totalInstallments}
                 </span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Invoice amount / already paid:</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200">
+                  ₹{selectedInvoiceForPayment.amount.toLocaleString('en-IN')} / ₹{selectedInvoiceForPayment.paidAmount.toLocaleString('en-IN')}
+                </span>
+              </div>
               <div className="flex justify-between pt-1 border-t border-slate-200 dark:border-slate-700">
-                <span className="font-bold text-slate-700 dark:text-slate-300">Amount Due:</span>
+                <span className="font-bold text-slate-700 dark:text-slate-300">Balance on this installment:</span>
                 <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 text-sm">
-                  ₹{selectedInvoiceForPayment.amount.toLocaleString('en-IN')}
+                  ₹{invoiceBalance(selectedInvoiceForPayment).toLocaleString('en-IN')}
                 </span>
               </div>
             </div>
 
             <form onSubmit={handleProcessInvoicePayment} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Amount Received (₹)</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={collectAmount}
+                  onChange={e => setCollectAmount(Number(e.target.value) || 0)}
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg font-mono font-bold"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Less than the balance is recorded as a part payment. More is applied to the next installments.
+                </p>
+              </div>
+              {payError && (
+                <div className="p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded text-rose-700 dark:text-rose-300">{payError}</div>
+              )}
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Payment Collection Mode
@@ -1213,7 +1299,7 @@ export const FeeManagement: React.FC = () => {
                   <span>
                     {isProcessing
                       ? 'Reconciling Ledger...'
-                      : `Confirm Clearance of ₹${selectedInvoiceForPayment.amount.toLocaleString('en-IN')}`}
+                      : `Record ₹${(collectAmount || 0).toLocaleString('en-IN')} & Issue Receipt`}
                   </span>
                 </button>
               </div>

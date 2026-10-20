@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Invoice, PaymentReceipt } from '../../types';
+import { Invoice } from '../../types';
+import { addDays, formatDate, weekdayOf } from '../../lib/dates';
+import { invoiceBalance } from '../../lib/fees';
 import {
   GraduationCap,
   Calendar,
@@ -25,18 +27,25 @@ import {
 export const StudentPortal: React.FC = () => {
   const {
     students,
-    currentUser,
+    role,
+    currentStudent: loggedInStudent,
     invoices,
     receipts,
     schedule,
+    attendance,
     materials,
     studentAttempts,
     assessmentTests,
     recordFeePayment,
     viewReceipt,
     setActiveTab,
-    createSupportTicket
+    createSupportTicket,
+    today
   } = useApp();
+
+  // Staff can open this portal in "view as" mode for any student.
+  const [viewAsId, setViewAsId] = useState<string>('');
+  const isViewAs = role !== 'student';
 
   const [activeSubTab, setActiveSubTab] = useState<'overview' | 'attendance' | 'tests' | 'fees' | 'materials'>('overview');
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
@@ -50,17 +59,87 @@ export const StudentPortal: React.FC = () => {
   const [payMethodChoice, setPayMethodChoice] = useState<'UPI' | 'Credit/Debit Card' | 'NetBanking'>('UPI');
   const [isPayingProcessing, setIsPayingProcessing] = useState(false);
 
-  const currentStudent = students.find(s => s.rollNumber === 'VRM-2026-089') || students[0];
+  const currentStudent = isViewAs ? students.find(s => s.id === viewAsId) || students[0] : loggedInStudent;
 
-  const myInvoices = invoices.filter(i => i.studentId === currentStudent?.id || i.studentRollNumber === currentStudent?.rollNumber);
-  const myReceipts = receipts.filter(r => r.studentId === currentStudent?.id || r.studentRollNumber === currentStudent?.rollNumber);
-  const myAttempts = studentAttempts.filter(a => a.studentId === currentStudent?.id || a.studentName === currentStudent?.name);
-  const mySchedule = schedule.filter(s => s.batchId === currentStudent?.enrolledBatchId || s.batchName === currentStudent?.enrolledBatchName);
+  const myInvoices = invoices
+    .filter(i => i.studentId === currentStudent?.id)
+    .sort((a, b) => a.installmentIndex - b.installmentIndex);
+  const myReceipts = receipts.filter(r => r.studentId === currentStudent?.id);
+  const myAttempts = studentAttempts
+    .filter(a => a.studentId === currentStudent?.id)
+    .sort((a, b) => b.attemptedAt.localeCompare(a.attemptedAt));
+  const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const mySchedule = schedule
+    .filter(s => s.batchId === currentStudent?.enrolledBatchId)
+    .sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day));
   const myMaterials = materials.filter(m =>
     m.targetScope === 'all' ||
     (m.targetScope === 'batch' && m.targetBatchId === currentStudent?.enrolledBatchId) ||
     (m.targetScope === 'individual' && m.targetStudentId === currentStudent?.id)
   );
+
+  // Next class: first timetable slot from today onwards.
+  const nextClass = useMemo(() => {
+    for (let i = 0; i < 7; i++) {
+      const date = addDays(today, i);
+      const slot = mySchedule.find(s => s.day === weekdayOf(date));
+      if (slot) return { slot, date };
+    }
+    return null;
+  }, [mySchedule, today]);
+
+  // Attendance built from the stored class sessions.
+  const myAttendance = useMemo(() => {
+    if (!currentStudent) return { sessions: [], bySubject: [] as { subject: string; attended: number; total: number }[] };
+    const sessions = attendance
+      .filter(a => a.batchId === currentStudent.enrolledBatchId && a.date >= currentStudent.admissionDate)
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .map(a => ({
+        ...a,
+        status: a.absentIds.includes(currentStudent.id) ? 'absent' : a.lateIds.includes(currentStudent.id) ? 'late' : 'present'
+      }));
+    const map = new Map<string, { attended: number; total: number }>();
+    for (const s of sessions) {
+      const m = map.get(s.subject) || { attended: 0, total: 0 };
+      m.total++;
+      if (s.status !== 'absent') m.attended++;
+      map.set(s.subject, m);
+    }
+    return { sessions, bySubject: [...map.entries()].map(([subject, v]) => ({ subject, ...v })) };
+  }, [attendance, currentStudent]);
+
+  // Subject-wise performance across all attempts.
+  const subjectPerformance = useMemo(() => {
+    const map = new Map<string, { score: number; total: number }>();
+    for (const a of myAttempts) {
+      for (const b of a.subjectBreakdown) {
+        const m = map.get(b.subject) || { score: 0, total: 0 };
+        m.score += Math.max(0, b.score);
+        m.total += b.total;
+        map.set(b.subject, m);
+      }
+    }
+    return [...map.entries()]
+      .map(([subject, v]) => ({ subject, pct: v.total ? Math.round((v.score / v.total) * 100) : 0 }))
+      .sort((a, b) => a.pct - b.pct); // weakest first
+  }, [myAttempts]);
+
+  const improvementAreas = useMemo(() => {
+    const weak = subjectPerformance.filter(s => s.pct < 60).map(s => s.subject);
+    const fromAttempts = myAttempts.flatMap(a => a.improvementAreas);
+    return [...new Set([...weak.map(w => `Strengthen ${w} (below 60% so far).`), ...fromAttempts])].slice(0, 4);
+  }, [subjectPerformance, myAttempts]);
+
+  const nextDueInvoice = myInvoices.find(i => i.status !== 'paid');
+  const latestRank = myAttempts[0]?.rankInBatch;
+
+  if (!currentStudent) {
+    return (
+      <div className="p-8 text-center text-sm text-slate-500 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
+        No student record is linked to this account.
+      </div>
+    );
+  }
 
   const handlePayInvoice = (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,9 +148,9 @@ export const StudentPortal: React.FC = () => {
     setTimeout(() => {
       const generatedReceipt = recordFeePayment(
         payingInvoice.id,
-        payingInvoice.amount,
+        invoiceBalance(payingInvoice),
         payMethodChoice,
-        `Student Online Portal Remittance - ${payingInvoice.invoiceNumber}`
+        `Paid online via student portal for ${payingInvoice.invoiceNumber}`
       );
       setIsPayingProcessing(false);
       setPayingInvoice(null);
@@ -105,6 +184,23 @@ export const StudentPortal: React.FC = () => {
   return (
     <div className="space-y-6">
       
+      {isViewAs && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs">
+          <span className="font-semibold text-amber-900 dark:text-amber-300">Viewing the portal as:</span>
+          <select
+            value={currentStudent.id}
+            onChange={e => setViewAsId(e.target.value)}
+            className="flex-1 sm:max-w-md px-3 py-1.5 border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg"
+          >
+            {students.map(s => (
+              <option key={s.id} value={s.id}>
+                {s.name} · {s.rollNumber} · {s.enrolledBatchName}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Student Welcome & Profile Hero Card */}
       <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-md border border-slate-800">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -126,7 +222,7 @@ export const StudentPortal: React.FC = () => {
                 {currentStudent?.enrolledCourseName}
               </p>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Cohort: <b className="text-amber-200">{currentStudent?.enrolledBatchName}</b> · Admitted on {currentStudent?.admissionDate}
+                Batch: <b className="text-amber-200">{currentStudent?.enrolledBatchName}</b> · Admitted on {formatDate(currentStudent?.admissionDate)}
               </p>
             </div>
           </div>
@@ -140,15 +236,15 @@ export const StudentPortal: React.FC = () => {
               </span>
             </div>
             <div className="p-2">
-              <span className="text-slate-400 text-[11px] block">Avg Mock Score</span>
+              <span className="text-slate-400 text-[11px] block">Avg Test Score</span>
               <span className="text-lg font-mono font-bold text-amber-400 tabular-nums">
-                {currentStudent?.averageTestScore || 16.7} / 20
+                {myAttempts.length ? `${currentStudent.averageTestScore}%` : '—'}
               </span>
             </div>
             <div className="p-2">
-              <span className="text-slate-400 text-[11px] block">Batch Rank</span>
+              <span className="text-slate-400 text-[11px] block">Latest Batch Rank</span>
               <span className="text-lg font-mono font-bold text-white tabular-nums">
-                #3
+                {latestRank ? `#${latestRank}` : '—'}
               </span>
             </div>
             <div className="p-2">
@@ -164,7 +260,14 @@ export const StudentPortal: React.FC = () => {
         <div className="mt-5 pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2 text-slate-300">
             <Clock className="w-3.5 h-3.5 text-amber-400" />
-            <span>Next Lecture: <b>Indian Polity & Constitutional Writs</b> at 07:30 AM (Hall 101)</span>
+            {nextClass ? (
+              <span>
+                Next class{nextClass.date === today ? ' (today)' : ` (${nextClass.slot.day})`}: <b>{nextClass.slot.subject}</b> ·{' '}
+                {nextClass.slot.time} · {nextClass.slot.room}
+              </span>
+            ) : (
+              <span>No upcoming classes scheduled.</span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -173,14 +276,14 @@ export const StudentPortal: React.FC = () => {
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium transition-colors"
             >
               <MessageSquare className="w-3.5 h-3.5" />
-              <span>Raise Mentor Query</span>
+              <span>Ask Faculty / Office</span>
             </button>
             <button
               onClick={() => setActiveTab('tests')}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition-colors shadow-2xs"
             >
               <ClipboardCheck className="w-3.5 h-3.5" />
-              <span>Take Active Test</span>
+              <span>Take a Test</span>
             </button>
           </div>
         </div>
@@ -246,61 +349,68 @@ export const StudentPortal: React.FC = () => {
           <div className="space-y-4">
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-2xs space-y-3">
               <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                Syllabus Milestones Completed
+                Subject-wise Performance
               </h3>
-              
-              <div className="space-y-3 text-xs">
-                <div>
-                  <div className="flex justify-between text-slate-600 dark:text-slate-400 mb-1">
-                    <span>Indian Polity & Constitution</span>
-                    <span className="font-mono font-semibold text-slate-900 dark:text-white">75%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                    <div className="bg-emerald-500 h-full w-3/4" />
-                  </div>
+              <p className="text-[11px] text-slate-400 -mt-2">Weakest topics first, across all tests taken</p>
+              {subjectPerformance.length === 0 ? (
+                <p className="text-xs text-slate-400">No tests taken yet.</p>
+              ) : (
+                <div className="space-y-3 text-xs">
+                  {subjectPerformance.slice(0, 6).map(sp => (
+                    <div key={sp.subject}>
+                      <div className="flex justify-between text-slate-600 dark:text-slate-400 mb-1 gap-2">
+                        <span className="truncate">{sp.subject}</span>
+                        <span className="font-mono font-semibold text-slate-900 dark:text-white">{sp.pct}%</span>
+                      </div>
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${sp.pct >= 75 ? 'bg-emerald-500' : sp.pct >= 50 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                          style={{ width: `${sp.pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-
-                <div>
-                  <div className="flex justify-between text-slate-600 dark:text-slate-400 mb-1">
-                    <span>Indian Economy & Macro Policy</span>
-                    <span className="font-mono font-semibold text-slate-900 dark:text-white">60%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                    <div className="bg-emerald-500 h-full w-3/5" />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-slate-600 dark:text-slate-400 mb-1">
-                    <span>Modern Indian History</span>
-                    <span className="font-mono font-semibold text-slate-900 dark:text-white">80%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                    <div className="bg-emerald-500 h-full w-4/5" />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-slate-600 dark:text-slate-400 mb-1">
-                    <span>Ethics, Integrity & Case Studies</span>
-                    <span className="font-mono font-semibold text-slate-900 dark:text-white">45%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                    <div className="bg-amber-500 h-full w-[45%]" />
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
 
             <div className="bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 rounded-xl p-4 text-xs space-y-2">
               <div className="flex items-center gap-1.5 font-bold text-amber-950 dark:text-amber-300 text-[11px] uppercase tracking-wider">
                 <Brain className="w-4 h-4 text-amber-700 dark:text-amber-400" />
-                <span>Mentor Observation</span>
+                <span>Areas of Improvement</span>
               </div>
-              <p className="text-amber-900/90 dark:text-slate-300 leading-relaxed text-[11px]">
-                "Strong conceptual foundation in Fundamental Rights and Judiciary. Focus on GS-3 Capital Account Convertibility & Fiscal Deficit nuances in upcoming weekend tests."
-              </p>
-              <span className="text-[10px] text-amber-800 dark:text-amber-400 font-semibold block">— Dr. K. Ramanathan (Polity Lead)</span>
+              {improvementAreas.length === 0 ? (
+                <p className="text-amber-900/90 dark:text-slate-300 text-[11px]">Take a test to get personalised suggestions.</p>
+              ) : (
+                <ul className="list-disc list-inside space-y-1 text-amber-900/90 dark:text-slate-300 text-[11px]">
+                  {improvementAreas.map((a, i) => (
+                    <li key={i}>{a}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 text-xs space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white text-[11px] uppercase tracking-wider">
+                <CreditCard className="w-4 h-4 text-amber-500" />
+                <span>Upcoming Payment</span>
+              </div>
+              {nextDueInvoice ? (
+                <>
+                  <p className="text-slate-600 dark:text-slate-300">
+                    Installment {nextDueInvoice.installmentIndex} of {nextDueInvoice.totalInstallments}:{' '}
+                    <b className="font-mono">₹{invoiceBalance(nextDueInvoice).toLocaleString('en-IN')}</b>
+                  </p>
+                  <p className={nextDueInvoice.status === 'overdue' ? 'text-rose-600 font-semibold' : 'text-slate-500'}>
+                    {nextDueInvoice.status === 'overdue' ? 'Overdue since' : 'Due on'} {formatDate(nextDueInvoice.dueDate)}
+                  </p>
+                  <button onClick={() => setActiveSubTab('fees')} className="text-amber-700 dark:text-amber-400 font-semibold hover:underline pt-1">
+                    View fees →
+                  </button>
+                </>
+              ) : (
+                <p className="text-emerald-600 font-semibold">All fees cleared.</p>
+              )}
             </div>
           </div>
         </div>
@@ -309,37 +419,88 @@ export const StudentPortal: React.FC = () => {
       {/* Tab 2: Attendance History */}
       {activeSubTab === 'attendance' && (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-2xs space-y-5">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Classroom Attendance Record: {currentStudent?.attendancePercentage}%
+                Class Attendance: {currentStudent.attendancePercentage}%
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                UPSC mandatory threshold: 75% minimum classroom presence required for test series clearance.
+                {myAttendance.sessions.filter(x => x.status !== 'absent').length} of {myAttendance.sessions.length} classes attended since{' '}
+                {formatDate(currentStudent.admissionDate)} · Academy policy: minimum 75% attendance.
               </p>
             </div>
-            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800">
-              Compliant · Exemplary Record
-            </span>
+            {currentStudent.attendancePercentage >= 75 ? (
+              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800 self-start">
+                Meets 75% requirement
+              </span>
+            ) : (
+              <span className="text-xs font-semibold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2.5 py-1 rounded-md border border-rose-200 dark:border-rose-800 self-start">
+                Below 75% requirement
+              </span>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl">
-              <span className="text-slate-500 dark:text-slate-400 font-medium block">Indian Polity & Constitution</span>
-              <div className="text-xl font-mono font-bold text-slate-900 dark:text-white mt-1">94.0%</div>
-              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-1 block">30 / 32 Lectures Attended</span>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+            {myAttendance.bySubject.map(sub => {
+              const pct = sub.total ? Math.round((sub.attended / sub.total) * 1000) / 10 : 100;
+              return (
+                <div key={sub.subject} className="p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl">
+                  <span className="text-slate-500 dark:text-slate-400 font-medium block">{sub.subject}</span>
+                  <div className="text-xl font-mono font-bold text-slate-900 dark:text-white mt-1">{pct}%</div>
+                  <span className={`text-[11px] font-medium mt-1 block ${pct >= 75 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                    {sub.attended} / {sub.total} classes attended
+                  </span>
+                </div>
+              );
+            })}
+          </div>
 
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl">
-              <span className="text-slate-500 dark:text-slate-400 font-medium block">Indian Economy & Budget</span>
-              <div className="text-xl font-mono font-bold text-slate-900 dark:text-white mt-1">90.0%</div>
-              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-1 block">27 / 30 Lectures Attended</span>
-            </div>
-
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl">
-              <span className="text-slate-500 dark:text-slate-400 font-medium block">Ethics & Case Studies (GS-4)</span>
-              <div className="text-xl font-mono font-bold text-slate-900 dark:text-white mt-1">91.0%</div>
-              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-1 block">20 / 22 Lectures Attended</span>
+          <div>
+            <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">Recent Classes</h4>
+            <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+              <div className="overflow-x-auto max-h-80">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold sticky top-0">
+                    <tr>
+                      <th className="px-4 py-2.5">Date</th>
+                      <th className="px-4 py-2.5">Subject</th>
+                      <th className="px-4 py-2.5">Faculty</th>
+                      <th className="px-4 py-2.5 text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {myAttendance.sessions.slice(0, 30).map(sess => (
+                      <tr key={sess.id}>
+                        <td className="px-4 py-2 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                          {formatDate(sess.date)} <span className="text-slate-400">({weekdayOf(sess.date).slice(0, 3)})</span>
+                        </td>
+                        <td className="px-4 py-2 text-slate-800 dark:text-slate-200">{sess.subject}</td>
+                        <td className="px-4 py-2 text-slate-500 dark:text-slate-400">{sess.facultyName}</td>
+                        <td className="px-4 py-2 text-right">
+                          <span
+                            className={`px-2 py-0.5 rounded font-semibold ${
+                              sess.status === 'present'
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+                                : sess.status === 'late'
+                                  ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
+                                  : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400'
+                            }`}
+                          >
+                            {sess.status === 'present' ? 'Present' : sess.status === 'late' ? 'Late' : 'Absent'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {myAttendance.sessions.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-6 text-center text-slate-400">
+                          No classes recorded yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -362,6 +523,11 @@ export const StudentPortal: React.FC = () => {
           </div>
 
           <div className="space-y-3">
+            {myAttempts.length === 0 && (
+              <div className="p-8 text-center text-xs text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
+                No tests attempted yet.
+              </div>
+            )}
             {myAttempts.map(attempt => (
               <div
                 key={attempt.id}
@@ -393,7 +559,9 @@ export const StudentPortal: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-slate-400 dark:text-slate-500 text-[10px] block">Negative Penalty</span>
-                    <span className="font-mono font-bold text-rose-700 dark:text-rose-400">-{attempt.incorrectAnswers * 0.66}</span>
+                    <span className="font-mono font-bold text-rose-700 dark:text-rose-400">
+                      -{Math.round(attempt.incorrectAnswers * (assessmentTests.find(t => t.id === attempt.testId)?.negativeMarksPerWrong ?? 0.66) * 100) / 100}
+                    </span>
                   </div>
                   <div>
                     <span className="text-slate-400 dark:text-slate-500 text-[10px] block">Batch Rank</span>
@@ -403,8 +571,9 @@ export const StudentPortal: React.FC = () => {
 
                 <div className="text-xs text-slate-700 dark:text-slate-300 space-y-1">
                   <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                    Mentor Remedial Feedback
+                    Areas to Improve
                   </span>
+                  {attempt.improvementAreas.length === 0 && <p className="text-emerald-600">No mistakes in this test.</p>}
                   <ul className="list-disc list-inside space-y-1">
                     {attempt.improvementAreas.map((item, i) => (
                       <li key={i}>{item}</li>
@@ -432,7 +601,7 @@ export const StudentPortal: React.FC = () => {
                   Tuition Account & Payment History
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Course: {currentStudent?.enrolledCourseName} · Plan: {currentStudent?.paymentPlan.replace('_', ' ')}
+                  Course: {currentStudent?.enrolledCourseName} · Plan: {currentStudent?.paymentPlan.replace(/_/g, ' ')}
                 </p>
               </div>
 
@@ -563,7 +732,7 @@ export const StudentPortal: React.FC = () => {
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-900 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors shadow-2xs"
                             >
                               <ShieldCheck className="w-3.5 h-3.5" />
-                              <span>Download Receipt</span>
+                              <span>View / Print</span>
                             </button>
                           </td>
                         </tr>
@@ -585,14 +754,15 @@ export const StudentPortal: React.FC = () => {
                 </h3>
               </div>
               <span className="text-xs font-mono text-slate-400">
-                {myInvoices.filter(i => i.status !== 'paid').length} Pending
+                {myInvoices.filter(i => i.status !== 'paid').length} Open
               </span>
             </div>
 
             <div className="space-y-3">
               {myInvoices.map(inv => {
-                const receipt = receipts.find(r => r.invoiceId === inv.id);
+                const receipt = receipts.find(r => r.allocations?.some(a => a.invoiceId === inv.id) || r.invoiceId === inv.id);
                 const isPaid = inv.status === 'paid';
+                const balance = invoiceBalance(inv);
 
                 return (
                   <div
@@ -607,14 +777,25 @@ export const StudentPortal: React.FC = () => {
                             Paid & Cleared
                           </span>
                         ) : (
-                          <span className="text-[11px] text-amber-800 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800 font-semibold">
-                            Due on {inv.dueDate}
+                          <span
+                            className={`text-[11px] px-2 py-0.5 rounded border font-semibold ${
+                              inv.status === 'overdue'
+                                ? 'text-rose-800 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800'
+                                : 'text-amber-800 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800'
+                            }`}
+                          >
+                            {inv.status === 'overdue' ? 'Overdue since' : 'Due on'} {formatDate(inv.dueDate)}
                           </span>
                         )}
                       </div>
                       <p className="text-slate-600 dark:text-slate-400">
                         Installment {inv.installmentIndex} of {inv.totalInstallments} · {inv.courseName}
                       </p>
+                      {!isPaid && inv.paidAmount > 0 && (
+                        <p className="text-slate-500 dark:text-slate-400">
+                          ₹{inv.paidAmount.toLocaleString('en-IN')} paid · ₹{balance.toLocaleString('en-IN')} remaining
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between sm:justify-end gap-4">
@@ -631,11 +812,11 @@ export const StudentPortal: React.FC = () => {
                         </button>
                       ) : (
                         <button
-                          onClick={() => setPayingInvoice(inv)}
+                          onClick={() => (role === 'student' ? setPayingInvoice(inv) : setActiveTab('fees'))}
                           className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 rounded-lg transition-colors shadow-2xs"
                         >
                           <CreditCard className="w-3.5 h-3.5" />
-                          <span>Pay Installment Now</span>
+                          <span>{role === 'student' ? `Pay ₹${balance.toLocaleString('en-IN')}` : 'Collect at Fees desk'}</span>
                         </button>
                       )}
                     </div>
@@ -670,14 +851,17 @@ export const StudentPortal: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Due Date:</span>
-                    <span className="font-mono text-slate-700 dark:text-slate-300">{payingInvoice.dueDate}</span>
+                    <span className="font-mono text-slate-700 dark:text-slate-300">{formatDate(payingInvoice.dueDate)}</span>
                   </div>
                   <div className="flex justify-between pt-2 border-t border-slate-200 dark:border-slate-700 font-mono text-sm font-bold">
                     <span>Payable Amount:</span>
-                    <span className="text-emerald-700 dark:text-emerald-400">₹{payingInvoice.amount.toLocaleString('en-IN')}</span>
+                    <span className="text-emerald-700 dark:text-emerald-400">₹{invoiceBalance(payingInvoice).toLocaleString('en-IN')}</span>
                   </div>
                 </div>
 
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Demo payment gateway: no real money is charged. A receipt is issued instantly.
+                </p>
                 <form onSubmit={handlePayInvoice} className="space-y-3 text-xs">
                   <div>
                     <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -720,7 +904,7 @@ export const StudentPortal: React.FC = () => {
                       <span>
                         {isPayingProcessing
                           ? 'Authorizing Transaction...'
-                          : `Pay ₹${payingInvoice.amount.toLocaleString('en-IN')} & Issue Receipt`}
+                          : `Pay ₹${invoiceBalance(payingInvoice).toLocaleString('en-IN')} & Issue Receipt`}
                       </span>
                     </button>
                   </div>

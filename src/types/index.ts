@@ -103,7 +103,14 @@ export interface Batch {
 }
 
 export type ScholarshipType = 'none' | 'merit_25' | 'ews_rural_40' | 'full_lump_sum_10' | 'custom';
-export type PaymentPlanType = 'one_time' | 'two_installments' | 'three_installments';
+export type PaymentPlanType = 'one_time' | 'two_installments' | 'three_installments' | 'monthly' | 'custom';
+
+/** One row of a fee schedule (used for monthly and custom plans). */
+export interface InstallmentRow {
+  amount: number;
+  dueDate: string; // YYYY-MM-DD
+  label?: string;
+}
 
 export interface Student {
   id: string;
@@ -125,6 +132,8 @@ export interface Student {
   paidFee: number;
   balanceFee: number;
   paymentPlan: PaymentPlanType;
+  /** Note about an agreed custom plan, e.g. "Pays after harvest season". */
+  paymentPlanNote?: string;
   attendancePercentage: number;
   averageTestScore: number;
   portalUsername: string;
@@ -162,6 +171,8 @@ export interface Invoice {
   paidAmount: number;
   paidDate?: string;
   receiptId?: string;
+  /** e.g. "Month 3" or "After Prelims" (custom plans). */
+  label?: string;
 }
 
 export interface PaymentReceipt {

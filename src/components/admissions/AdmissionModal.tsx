@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Modal } from '../common/Modal';
 import { Lead, ScholarshipType, PaymentPlanType, PaymentReceipt, Student } from '../../types';
+import { InstallmentPlanEditor, PlanValue, initialPlanValue, withRows } from '../fees/InstallmentPlanEditor';
+import { scheduleProblems } from '../../lib/fees';
+import { todayISO } from '../../lib/dates';
 import { AdmissionFormPrint, printableFromStudent } from './AdmissionFormPrint';
 import { computeDiscount } from '../../lib/fees';
 import {
@@ -63,18 +66,21 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
 
   const [scholarship, setScholarship] = useState<ScholarshipType>('none');
   const [customDiscount, setCustomDiscount] = useState<number>(15000);
-  const [paymentPlan, setPaymentPlan] = useState<PaymentPlanType>('two_installments');
+  const [planValue, setPlanValue] = useState<PlanValue>(() => initialPlanValue(135000, todayISO()));
+  const paymentPlan: PaymentPlanType = planValue.plan;
   const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'Credit/Debit Card' | 'NetBanking' | 'Demand Draft' | 'Cash'>('UPI');
   
   const calculatedDiscount = computeDiscount(baseFee, scholarship, customDiscount);
 
   const netFee = Math.max(0, baseFee - calculatedDiscount);
   
-  const defaultAdvance = paymentPlan === 'one_time' 
-    ? netFee 
-    : paymentPlan === 'two_installments' 
-    ? Math.round(netFee / 2) 
-    : Math.round(netFee / 3);
+  // Keep the schedule in step with the fee (custom rows are left for staff to adjust).
+  useEffect(() => {
+    setPlanValue(v => withRows(v, netFee, todayISO()));
+  }, [netFee]);
+  const planProblems = scheduleProblems(planValue.rows, netFee, todayISO());
+  // Default advance = whatever falls due today (the first payment).
+  const defaultAdvance = planValue.rows.filter(r => r.dueDate <= todayISO()).reduce((sum, r) => sum + r.amount, 0) || planValue.rows[0]?.amount || 0;
 
   const [advanceAmount, setAdvanceAmount] = useState<number>(defaultAdvance);
 
@@ -98,6 +104,10 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
   const handleProcessAdmission = () => {
     if (!studentName.trim() || !phone.trim()) {
       setFormError('Please fill in the student name and contact number.');
+      return;
+    }
+    if (planProblems.length) {
+      setFormError(`Fix the payment plan: ${planProblems[0]}`);
       return;
     }
     if (!advanceAmount || advanceAmount <= 0) {
@@ -128,6 +138,8 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
         scholarship,
         customDiscountAmount: customDiscount,
         paymentPlan,
+        schedule: planValue.rows,
+        paymentPlanNote: planValue.note,
         paymentMethod,
         advancePaymentAmount: Number(advanceAmount),
         form: {
@@ -345,40 +357,8 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({ initialLead, onC
               </div>
             </div>
 
-            {/* Payment Cycle Plan */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
-                Preferred Payment Cycle / Plan
-              </label>
-              <div className="grid grid-cols-3 gap-3 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setPaymentPlan('one_time')}
-                  className={`p-2.5 rounded-lg border text-left transition-colors ${paymentPlan === 'one_time' ? 'border-amber-600 bg-amber-50/70 dark:bg-amber-950/40 font-semibold text-slate-900 dark:text-white' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
-                >
-                  <div>1-Time Full Payment</div>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">1 invoice of ₹{netFee.toLocaleString('en-IN')}</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaymentPlan('two_installments')}
-                  className={`p-2.5 rounded-lg border text-left transition-colors ${paymentPlan === 'two_installments' ? 'border-amber-600 bg-amber-50/70 dark:bg-amber-950/40 font-semibold text-slate-900 dark:text-white' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
-                >
-                  <div>2-Installment Plan</div>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">50% Advance + 50% in 60 days</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaymentPlan('three_installments')}
-                  className={`p-2.5 rounded-lg border text-left transition-colors ${paymentPlan === 'three_installments' ? 'border-amber-600 bg-amber-50/70 dark:bg-amber-950/40 font-semibold text-slate-900 dark:text-white' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
-                >
-                  <div>3-Installment Plan</div>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Equal 3 tranches across term</div>
-                </button>
-              </div>
-            </div>
+            {/* Payment plan: fixed, monthly or fully custom */}
+            <InstallmentPlanEditor total={netFee} start={todayISO()} value={planValue} onChange={setPlanValue} />
 
             {/* Simulated Payment Gateway Section */}
             <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-slate-50/70 dark:bg-slate-800/40">

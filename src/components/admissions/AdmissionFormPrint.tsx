@@ -5,12 +5,8 @@ import { Modal } from '../common/Modal';
 import { ACADEMY, ADMISSION_DECLARATIONS } from '../../config/academy';
 import { formatDate } from '../../lib/dates';
 import { printLight } from '../../lib/print';
+import { PLAN_LABEL } from '../../lib/fees';
 
-const PLAN_LABEL: Record<Student['paymentPlan'], string> = {
-  one_time: 'One-time payment',
-  two_installments: '2 installments',
-  three_installments: '3 installments'
-};
 
 /** Everything the printed form shows; built from an admitted student or an online application. */
 export interface PrintableAdmissionForm {

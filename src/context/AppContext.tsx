@@ -33,7 +33,8 @@ import {
   OnlineClass,
   ClassReminder,
   AcademySettings,
-  ScheduleChange
+  ScheduleChange,
+  InstallmentRow
 } from '../types';
 import {
   INITIAL_ANNOUNCEMENTS,
@@ -79,6 +80,9 @@ export interface AdmissionInput {
   scholarship: ScholarshipType;
   customDiscountAmount?: number;
   paymentPlan: PaymentPlanType;
+  /** Exact schedule for monthly / custom plans (must add up to the net fee). */
+  schedule?: InstallmentRow[];
+  paymentPlanNote?: string;
   paymentMethod: PaymentMethod;
   advancePaymentAmount: number;
   transactionRef?: string;
@@ -244,6 +248,8 @@ interface AppContextType {
     transactionReference?: string;
   }) => PaymentReceipt;
   studentOutstanding: (studentId: string) => number;
+  /** Replaces a student's unpaid installments with a new schedule for the outstanding balance. Paid amounts are kept. */
+  reschedulePayments: (studentId: string, rows: InstallmentRow[], plan: PaymentPlanType, note?: string) => void;
 
   addExamAlert: (alert: Omit<ExamAlert, 'id'>) => void;
   addAnnouncement: (ann: Omit<AcademyAnnouncement, 'id' | 'date'>) => void;
@@ -688,6 +694,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       paidFee: 0,
       balanceFee: netFee,
       paymentPlan: data.paymentPlan,
+      paymentPlanNote: data.paymentPlanNote?.trim() || undefined,
       attendancePercentage: 100,
       averageTestScore: 0,
       portalUsername: rollNumber,
@@ -699,7 +706,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Invoices for each installment, numbered sequentially across the academy.
     const existingInvoiceNumbers = invoicesRaw.map(i => i.invoiceNumber);
-    const plan = buildInstallmentSchedule(netFee, data.paymentPlan, admissionDate);
+    const plan: InstallmentRow[] =
+      data.schedule && data.schedule.length && Math.round(data.schedule.reduce((sum, r) => sum + r.amount, 0)) === Math.round(netFee)
+        ? data.schedule
+        : buildInstallmentSchedule(netFee, data.paymentPlan, admissionDate);
     const newInvoices: Invoice[] = plan.map((inst, idx) => {
       const invoiceNumber = nextSequence(existingInvoiceNumbers, 'VRM/INV/2026/');
       existingInvoiceNumbers.push(invoiceNumber);
@@ -714,6 +724,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         totalInstallments: plan.length,
         amount: inst.amount,
         dueDate: inst.dueDate,
+        label: inst.label,
         status: 'pending',
         paidAmount: 0
       };
@@ -1147,6 +1158,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // ---------- fees ----------
+  const reschedulePayments: AppContextType['reschedulePayments'] = (studentId, rows, plan, note) => {
+    const student = studentsRaw.find(s => s.id === studentId);
+    if (!student) return;
+    const mine = invoicesRaw.filter(i => i.studentId === studentId).sort((a, b) => a.installmentIndex - b.installmentIndex);
+    // Keep what's paid: fully paid invoices stay; a part-paid one is closed at the amount paid.
+    const kept = mine
+      .filter(i => (i.paidAmount || 0) > 0)
+      .map(i => ((i.paidAmount || 0) >= i.amount ? i : { ...i, amount: i.paidAmount || 0, status: 'paid' as const }));
+    const numbers = invoicesRaw.map(i => i.invoiceNumber);
+    const stamp = Date.now().toString(36);
+    const fresh: Invoice[] = rows.map((r, idx) => {
+      const invoiceNumber = nextSequence(numbers, 'VRM/INV/2026/');
+      numbers.push(invoiceNumber);
+      return {
+        id: `inv-${studentId}-r${stamp}-${idx + 1}`,
+        invoiceNumber,
+        studentId,
+        studentName: student.name,
+        studentRollNumber: student.rollNumber,
+        courseName: student.enrolledCourseName,
+        installmentIndex: 0,
+        totalInstallments: 0,
+        amount: Math.round(r.amount),
+        dueDate: r.dueDate,
+        label: r.label?.trim() || undefined,
+        status: 'pending',
+        paidAmount: 0
+      };
+    });
+    const all = [...kept, ...fresh].map((i, idx, arr) => ({ ...i, installmentIndex: idx + 1, totalInstallments: arr.length }));
+    setInvoices(prev => [...prev.filter(i => i.studentId !== studentId), ...all]);
+    setStudents(prev => prev.map(s => (s.id === studentId ? { ...s, paymentPlan: plan, paymentPlanNote: note?.trim() || s.paymentPlanNote } : s)));
+  };
+
   const studentOutstanding = (studentId: string) =>
     invoicesRaw.filter(i => i.studentId === studentId).reduce((sum, i) => sum + invoiceBalance(i), 0);
 
@@ -1637,6 +1682,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         recordFeePayment,
         recordDirectFeePayment,
         studentOutstanding,
+        reschedulePayments,
         addExamAlert,
         addAnnouncement,
         createSupportTicket,

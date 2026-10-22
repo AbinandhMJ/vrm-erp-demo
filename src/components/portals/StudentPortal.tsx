@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { Modal } from '../common/Modal';
 import { Invoice } from '../../types';
 import { addDays, formatDate, weekdayOf } from '../../lib/dates';
-import { invoiceBalance } from '../../lib/fees';
+import { invoiceBalance, planLabel } from '../../lib/fees';
 import { DailyQuizCard } from './DailyQuizCard';
 import { UpcomingOnlineClassesCard } from '../academics/OnlineClasses';
 import { UpcomingExamsCard } from '../exams/ExamsModule';
@@ -447,7 +447,7 @@ export const StudentPortal: React.FC = () => {
               {nextDueInvoice ? (
                 <>
                   <p className="text-slate-600 dark:text-slate-300">
-                    Installment {nextDueInvoice.installmentIndex} of {nextDueInvoice.totalInstallments}:{' '}
+                    {nextDueInvoice.label || `Installment ${nextDueInvoice.installmentIndex}`} ({nextDueInvoice.installmentIndex} of {nextDueInvoice.totalInstallments}):{' '}
                     <b className="font-mono">₹{invoiceBalance(nextDueInvoice).toLocaleString('en-IN')}</b>
                   </p>
                   <p className={nextDueInvoice.status === 'overdue' ? 'text-rose-600 font-semibold' : 'text-slate-500'}>
@@ -650,7 +650,7 @@ export const StudentPortal: React.FC = () => {
                   Tuition Account & Payment History
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Course: {currentStudent?.enrolledCourseName} · Plan: {currentStudent?.paymentPlan.replace(/_/g, ' ')}
+                  Course: {currentStudent?.enrolledCourseName} · Plan: {currentStudent ? planLabel(currentStudent.paymentPlan, invoices.filter(i => i.studentId === currentStudent.id).length) : ''}
                 </p>
               </div>
 
@@ -838,7 +838,7 @@ export const StudentPortal: React.FC = () => {
                         )}
                       </div>
                       <p className="text-slate-600 dark:text-slate-400">
-                        Installment {inv.installmentIndex} of {inv.totalInstallments} · {inv.courseName}
+                        {inv.label || `Installment ${inv.installmentIndex}`} ({inv.installmentIndex} of {inv.totalInstallments}) · {inv.courseName}
                       </p>
                       {!isPaid && inv.paidAmount > 0 && (
                         <p className="text-slate-500 dark:text-slate-400">

@@ -38,7 +38,7 @@ import {
   INITIAL_STUDENTS
 } from './mockData';
 import { addDays, parseISODate, todayISO, toISODate, weekdayOf } from '../lib/dates';
-import { allocatePayment, buildInstallmentSchedule, computeDiscount } from '../lib/fees';
+import { allocatePayment, buildInstallmentSchedule, buildMonthlySchedule, computeDiscount } from '../lib/fees';
 import { pickDailyQuestions } from '../lib/dailyQuiz';
 
 // ---------- deterministic randomness ----------
@@ -188,8 +188,9 @@ export const buildSeed = (): SeedData => {
           ? 'one_time'
           : weighted([
               ['one_time', 25],
-              ['two_installments', 45],
-              ['three_installments', 30]
+              ['two_installments', 40],
+              ['three_installments', 25],
+              ['monthly', 12]
             ]);
       const custom = scholarship === 'custom' ? pick([5000, 7500, 10000, 15000]) : 0;
       const discount = computeDiscount(course.totalFee, scholarship, custom);
@@ -264,7 +265,10 @@ export const buildSeed = (): SeedData => {
   let invSeq = 1;
 
   for (const s of [...students].sort((a, b) => a.admissionDate.localeCompare(b.admissionDate))) {
-    const schedule = buildInstallmentSchedule(s.netFee, s.paymentPlan, s.admissionDate);
+    const schedule: { amount: number; dueDate: string; label?: string }[] =
+      s.paymentPlan === 'monthly'
+        ? buildMonthlySchedule(s.netFee, 10, s.admissionDate, { firstPayment: Math.round((s.netFee * 0.2) / 500) * 500 })
+        : buildInstallmentSchedule(s.netFee, s.paymentPlan, s.admissionDate);
     schedule.forEach((inst, idx) => {
       invoices.push({
         id: `inv-${s.id}-${idx + 1}`,
@@ -277,6 +281,7 @@ export const buildSeed = (): SeedData => {
         totalInstallments: schedule.length,
         amount: inst.amount,
         dueDate: inst.dueDate,
+        label: inst.label,
         status: 'pending',
         paidAmount: 0
       });

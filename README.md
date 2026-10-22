@@ -87,6 +87,11 @@ CSV export, print) and a printable question paper with answer key. The question 
 is a folder with its questions, plus *All questions* and *Not in any exam*. Students see live and upcoming exams with
 countdowns on their dashboard and in notifications, take each exam once, and see results when they are released.
 
+**Payment plans**: at admission, choose one-time, 2 or 3 installments, monthly (1–24 months, optional amount at
+admission, chosen due day), or a fully custom schedule (any number of payments with your own labels, dates and amounts,
+e.g. "After harvest"). The plan must add up to the net fee. *Change plan* in Fee Management re-plans a student's
+unpaid balance later; payments already made stay as they are.
+
 **Class schedules**: staff add classes to the weekly timetable, schedule one-time extra/make-up classes, or cancel one
 day's class with a reason. Clashes (same batch, faculty or room at the same time) are flagged. The week view shows the
 actual classes by date, including online classes; students see changes in their schedule, dashboard and notifications.

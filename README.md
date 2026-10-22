@@ -79,6 +79,23 @@ shared with them (on the same browser).
 read on the device with Tesseract OCR, served from `public/ocr`, copied by `scripts/copy-ocr.mjs` before dev/build), or
 pasted text. Every question is shown for review and correction before it is added; duplicates are flagged.
 
+**Exams & Question Bank** (staff): *Schedule new exam* walks through details → questions (write new ones, pick from
+the bank by hand or at random, or import a file) → date, time window, duration, negative marking, shuffling and when
+results are released → review. Exams can be saved as drafts, scheduled, started now or ended early. Written (offline)
+exams take marks entered by staff. Each exam has results (rank list, question-by-question analysis, who missed it,
+CSV export, print) and a printable question paper with answer key. The question bank is organised by exam: each exam
+is a folder with its questions, plus *All questions* and *Not in any exam*. Students see live and upcoming exams with
+countdowns on their dashboard and in notifications, take each exam once, and see results when they are released.
+
+**Payment plans**: at admission, choose one-time, 2 or 3 installments, monthly (1–24 months, optional amount at
+admission, chosen due day), or a fully custom schedule (any number of payments with your own labels, dates and amounts,
+e.g. "After harvest"). The plan must add up to the net fee. *Change plan* in Fee Management re-plans a student's
+unpaid balance later; payments already made stay as they are.
+
+**Class schedules**: staff add classes to the weekly timetable, schedule one-time extra/make-up classes, or cancel one
+day's class with a reason. Clashes (same batch, faculty or room at the same time) are flagged. The week view shows the
+actual classes by date, including online classes; students see changes in their schedule, dashboard and notifications.
+
 Use the ↺ menu in the header to load sample data or clear everything.
 
 ## How the data works

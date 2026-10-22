@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Clock, CheckCircle2, Upload, AlertTriangle, BookOpen, Video, ChevronDown, ChevronUp } from 'lucide-react';
+import { Clock, CheckCircle2, Upload, AlertTriangle, BookOpen, Video, ChevronDown, ChevronUp, ClipboardList, CalendarDays, CalendarCheck } from 'lucide-react';
 import { formatDate, weekdayOf } from '../../lib/dates';
 import { sameSubject } from '../../lib/subjects';
+import { classesOn } from '../../lib/timetable';
 import { Avatar } from '../common/PhotoPicker';
 
 type Mark = 'present' | 'absent' | 'late';
@@ -23,6 +24,7 @@ export const FacultyPortal: React.FC = () => {
     attendance,
     studentAttempts,
     onlineClasses,
+    scheduleChanges,
     today
   } = useApp();
 
@@ -50,7 +52,9 @@ export const FacultyPortal: React.FC = () => {
   const activeSubject = mySubjects.includes(subjectFilter) ? subjectFilter : 'all';
   const inSubject = (subject: string) => activeSubject === 'all' || sameSubject(subject, activeSubject);
 
-  const todaysClasses = mySlots.filter(s => s.day === weekdayOf(today) && inSubject(s.subject));
+  const todaysClasses = classesOn(today, schedule, scheduleChanges)
+    .filter(c => c.facultyName === currentFaculty?.name && c.kind !== 'cancelled' && inSubject(c.subject))
+    .map(c => ({ ...c, id: c.key }));
 
   const [selectedBatchId, setSelectedBatchId] = useState('');
   const batchId = myBatches.some(b => b.id === selectedBatchId) ? selectedBatchId : myBatches[0]?.id || '';
@@ -213,13 +217,28 @@ export const FacultyPortal: React.FC = () => {
               <span>No classes scheduled for you today.</span>
             )}
           </div>
-          <button
-            onClick={() => setActiveTab('materials')}
-            className="self-start inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors shadow-2xs"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            <span>Share Notes to Batch</span>
-          </button>
+          <div className="flex flex-wrap gap-1.5" data-quick-actions>
+            {(
+              [
+                ['tests', 'Schedule exam', ClipboardList],
+                ['timetable', 'Schedule class', CalendarDays],
+                ['online_classes', 'Online class', Video],
+                ['materials', 'Share notes', Upload],
+                ['leave', 'Apply leave', CalendarCheck]
+              ] as const
+            ).map(([tab, label, Icon], i) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-colors ${
+                  i === 0 ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

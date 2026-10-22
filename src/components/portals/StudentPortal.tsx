@@ -3,9 +3,11 @@ import { useApp } from '../../context/AppContext';
 import { Modal } from '../common/Modal';
 import { Invoice } from '../../types';
 import { addDays, formatDate, weekdayOf } from '../../lib/dates';
-import { invoiceBalance } from '../../lib/fees';
+import { invoiceBalance, planLabel } from '../../lib/fees';
 import { DailyQuizCard } from './DailyQuizCard';
 import { UpcomingOnlineClassesCard } from '../academics/OnlineClasses';
+import { UpcomingExamsCard } from '../exams/ExamsModule';
+import { classesOn, parseRange } from '../../lib/timetable';
 import { PhotoPicker } from '../common/PhotoPicker';
 import { materialIsFor } from '../../lib/materials';
 import { openStoredFile } from '../../lib/fileStore';
@@ -47,6 +49,7 @@ export const StudentPortal: React.FC = () => {
     setActiveTab,
     createSupportTicket,
     updateStudentPhoto,
+    scheduleChanges,
     today
   } = useApp();
   const [photoOpen, setPhotoOpen] = useState(false);
@@ -84,14 +87,19 @@ export const StudentPortal: React.FC = () => {
   const myMaterials = materials.filter(m => materialIsFor(m, currentStudent));
 
   // Next class: first timetable slot from today onwards.
+  // Next class: from the actual dated schedule (skips cancelled classes, includes extra classes).
   const nextClass = useMemo(() => {
-    for (let i = 0; i < 7; i++) {
+    const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+    for (let i = 0; i < 8; i++) {
       const date = addDays(today, i);
-      const slot = mySchedule.find(s => s.day === weekdayOf(date));
-      if (slot) return { slot, date };
+      const slot = classesOn(date, schedule, scheduleChanges).find(
+        c => c.batchId === currentStudent?.enrolledBatchId && c.kind !== 'cancelled' && (i > 0 || parseRange(c.time).end > nowMin)
+      );
+      if (slot) return { slot: { ...slot, day: weekdayOf(date) }, date };
     }
     return null;
-  }, [mySchedule, today]);
+  }, [schedule, scheduleChanges, currentStudent, today]);
+  const myChanges = scheduleChanges.filter(c => c.batchId === currentStudent?.enrolledBatchId && c.date >= today && c.date <= addDays(today, 7));
 
   // Attendance built from the stored class sessions.
   const myAttendance = useMemo(() => {
@@ -286,7 +294,8 @@ export const StudentPortal: React.FC = () => {
             <Clock className="w-3.5 h-3.5 text-amber-400" />
             {nextClass ? (
               <span>
-                Next class{nextClass.date === today ? ' (today)' : ` (${nextClass.slot.day})`}: <b>{nextClass.slot.subject}</b> ·{' '}
+                Next class{nextClass.date === today ? ' (today)' : ` (${nextClass.slot.day})`}: <b>{nextClass.slot.subject}</b>
+                {nextClass.slot.kind === 'extra' ? ' (extra class)' : ''} ·{' '}
                 {nextClass.slot.time} · {nextClass.slot.room}
               </span>
             ) : (
@@ -340,6 +349,18 @@ export const StudentPortal: React.FC = () => {
       {activeSubTab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
+          {myChanges.length > 0 && (
+            <div className="p-4 rounded-xl bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900 text-xs text-violet-900 dark:text-violet-200 space-y-1" data-schedule-changes>
+              <div className="font-bold">Timetable changes this week</div>
+              {myChanges.map(c => (
+                <div key={c.id}>
+                  {c.kind === 'cancelled' ? 'Cancelled' : 'Extra class'}: <b>{c.subject}</b> on {weekdayOf(c.date)} {formatDate(c.date)}, {c.time}
+                  {c.reason ? ` (${c.reason})` : ''}
+                </div>
+              ))}
+            </div>
+          )}
+          <UpcomingExamsCard batchId={currentStudent.enrolledBatchId} studentId={currentStudent.id} />
           <UpcomingOnlineClassesCard batchId={currentStudent.enrolledBatchId} />
           <DailyQuizCard studentId={currentStudent.id} readOnly={isViewAs} />
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-2xs space-y-4">
@@ -426,7 +447,7 @@ export const StudentPortal: React.FC = () => {
               {nextDueInvoice ? (
                 <>
                   <p className="text-slate-600 dark:text-slate-300">
-                    Installment {nextDueInvoice.installmentIndex} of {nextDueInvoice.totalInstallments}:{' '}
+                    {nextDueInvoice.label || `Installment ${nextDueInvoice.installmentIndex}`} ({nextDueInvoice.installmentIndex} of {nextDueInvoice.totalInstallments}):{' '}
                     <b className="font-mono">₹{invoiceBalance(nextDueInvoice).toLocaleString('en-IN')}</b>
                   </p>
                   <p className={nextDueInvoice.status === 'overdue' ? 'text-rose-600 font-semibold' : 'text-slate-500'}>
@@ -629,7 +650,7 @@ export const StudentPortal: React.FC = () => {
                   Tuition Account & Payment History
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Course: {currentStudent?.enrolledCourseName} · Plan: {currentStudent?.paymentPlan.replace(/_/g, ' ')}
+                  Course: {currentStudent?.enrolledCourseName} · Plan: {currentStudent ? planLabel(currentStudent.paymentPlan, invoices.filter(i => i.studentId === currentStudent.id).length) : ''}
                 </p>
               </div>
 
@@ -817,7 +838,7 @@ export const StudentPortal: React.FC = () => {
                         )}
                       </div>
                       <p className="text-slate-600 dark:text-slate-400">
-                        Installment {inv.installmentIndex} of {inv.totalInstallments} · {inv.courseName}
+                        {inv.label || `Installment ${inv.installmentIndex}`} ({inv.installmentIndex} of {inv.totalInstallments}) · {inv.courseName}
                       </p>
                       {!isPaid && inv.paidAmount > 0 && (
                         <p className="text-slate-500 dark:text-slate-400">

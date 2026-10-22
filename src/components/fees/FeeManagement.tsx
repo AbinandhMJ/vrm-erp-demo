@@ -3,7 +3,8 @@ import { formatDate } from '../../lib/dates';
 import { printLight } from '../../lib/print';
 import { BarsChart, ChartCard, lakhs } from '../charts/Charts';
 import { lastMonths } from '../../lib/metrics';
-import { invoiceBalance } from '../../lib/fees';
+import { invoiceBalance, planLabel } from '../../lib/fees';
+import { ChangePlanModal } from './ChangePlanModal';
 import { useApp } from '../../context/AppContext';
 import { ACADEMY } from '../../config/academy';
 import { Modal } from '../common/Modal';
@@ -54,6 +55,8 @@ export const FeeManagement: React.FC = () => {
   const [courseFilter, setCourseFilter] = useState('all');
   const [selectedStudentForLedger, setSelectedStudentForLedger] = useState<Student | null>(null);
   const [selectedStudentForStatement, setSelectedStudentForStatement] = useState<Student | null>(null);
+  const [changePlanFor, setChangePlanFor] = useState<Student | null>(null);
+  const [planNotice, setPlanNotice] = useState('');
 
   // Invoicing Collect Fee Modal
   const [selectedInvoiceForPayment, setSelectedInvoiceForPayment] = useState<Invoice | null>(null);
@@ -214,7 +217,25 @@ export const FeeManagement: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      
+      {planNotice && (
+        <div role="status" className="p-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-xs text-emerald-900 dark:text-emerald-200 flex justify-between gap-2">
+          <span>{planNotice}</span>
+          <button onClick={() => setPlanNotice('')} className="font-semibold">
+            Dismiss
+          </button>
+        </div>
+      )}
+      {changePlanFor && (
+        <ChangePlanModal
+          student={changePlanFor}
+          onClose={() => setChangePlanFor(null)}
+          onSaved={msg => {
+            setChangePlanFor(null);
+            setPlanNotice(msg);
+          }}
+        />
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
@@ -539,7 +560,7 @@ export const FeeManagement: React.FC = () => {
                       : 100}% Cleared
                   </span>
                   <span className="text-slate-400">
-                    Payment Plan: {selectedStudentFilterObj.paymentPlan.replace('_', ' ').toUpperCase()}
+                    Payment Plan: {planLabel(selectedStudentFilterObj.paymentPlan, invoices.filter(i => i.studentId === selectedStudentFilterObj.id).length)}
                   </span>
                 </div>
                 <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
@@ -708,7 +729,7 @@ export const FeeManagement: React.FC = () => {
                         <span className="font-mono text-xs text-slate-500 block">{stu.rollNumber} · {stu.enrolledBatchName}</span>
                       </div>
                       <span className="text-[10px] font-mono uppercase font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                        {stu.paymentPlan.replace('_', ' ')}
+                        {planLabel(stu.paymentPlan, studentInvoices.length)}
                       </span>
                     </div>
 
@@ -753,6 +774,7 @@ export const FeeManagement: React.FC = () => {
                         </span>
                       </div>
                     </div>
+                    {stu.paymentPlanNote && <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">Plan note: {stu.paymentPlanNote}</p>}
                     {stu.discountAmount > 0 && (
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
                         Course fee ₹{stu.totalFee.toLocaleString('en-IN')} less scholarship ₹{stu.discountAmount.toLocaleString('en-IN')}
@@ -765,13 +787,23 @@ export const FeeManagement: React.FC = () => {
                       {studentReceipts.length} Receipts · {studentInvoices.length} Invoices
                     </span>
 
+                    <span className="flex flex-wrap gap-1.5 justify-end">
+                    {stu.balanceFee > 0 && (
+                      <button
+                        onClick={() => setChangePlanFor(stu)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg"
+                      >
+                        Change plan
+                      </button>
+                    )}
                     <button
                       onClick={() => setSelectedStudentForLedger(stu)}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-900 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors shadow-2xs"
                     >
-                      <span>View Complete Payment History</span>
+                      <span>Payment history</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
+                    </span>
                   </div>
                 </div>
               );
@@ -857,7 +889,7 @@ export const FeeManagement: React.FC = () => {
                         </td>
 
                         <td className="px-4 py-3 font-mono text-slate-800 dark:text-slate-200">
-                          {inv.installmentIndex} of {inv.totalInstallments}
+                          {inv.label || `Installment ${inv.installmentIndex}`} · {inv.installmentIndex} of {inv.totalInstallments}
                         </td>
 
                         <td className={`px-4 py-3 font-mono whitespace-nowrap ${inv.status === 'overdue' ? 'text-rose-600 font-bold' : 'text-slate-700 dark:text-slate-300'}`}>
@@ -1049,7 +1081,7 @@ export const FeeManagement: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-bold text-slate-900 dark:text-white">{inv.invoiceNumber}</span>
                         <span className="text-[10px] text-slate-500">
-                          Installment {inv.installmentIndex} of {inv.totalInstallments}
+                          {inv.label || `Installment ${inv.installmentIndex}`} · {inv.installmentIndex} of {inv.totalInstallments}
                         </span>
                       </div>
                       <span className={`text-[11px] font-mono ${inv.status === 'overdue' ? 'text-rose-600 font-semibold' : 'text-slate-400'}`}>

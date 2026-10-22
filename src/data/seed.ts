@@ -38,7 +38,7 @@ import {
   INITIAL_STUDENTS
 } from './mockData';
 import { addDays, parseISODate, todayISO, toISODate, weekdayOf } from '../lib/dates';
-import { allocatePayment, buildInstallmentSchedule, computeDiscount } from '../lib/fees';
+import { allocatePayment, buildInstallmentSchedule, buildMonthlySchedule, computeDiscount } from '../lib/fees';
 import { pickDailyQuestions } from '../lib/dailyQuiz';
 
 // ---------- deterministic randomness ----------
@@ -188,8 +188,9 @@ export const buildSeed = (): SeedData => {
           ? 'one_time'
           : weighted([
               ['one_time', 25],
-              ['two_installments', 45],
-              ['three_installments', 30]
+              ['two_installments', 40],
+              ['three_installments', 25],
+              ['monthly', 12]
             ]);
       const custom = scholarship === 'custom' ? pick([5000, 7500, 10000, 15000]) : 0;
       const discount = computeDiscount(course.totalFee, scholarship, custom);
@@ -264,7 +265,10 @@ export const buildSeed = (): SeedData => {
   let invSeq = 1;
 
   for (const s of [...students].sort((a, b) => a.admissionDate.localeCompare(b.admissionDate))) {
-    const schedule = buildInstallmentSchedule(s.netFee, s.paymentPlan, s.admissionDate);
+    const schedule: { amount: number; dueDate: string; label?: string }[] =
+      s.paymentPlan === 'monthly'
+        ? buildMonthlySchedule(s.netFee, 10, s.admissionDate, { firstPayment: Math.round((s.netFee * 0.2) / 500) * 500 })
+        : buildInstallmentSchedule(s.netFee, s.paymentPlan, s.admissionDate);
     schedule.forEach((inst, idx) => {
       invoices.push({
         id: `inv-${s.id}-${idx + 1}`,
@@ -277,6 +281,7 @@ export const buildSeed = (): SeedData => {
         totalInstallments: schedule.length,
         amount: inst.amount,
         dueDate: inst.dueDate,
+        label: inst.label,
         status: 'pending',
         paidAmount: 0
       });
@@ -385,6 +390,14 @@ export const buildSeed = (): SeedData => {
   const fromBank = (ids: string[]): Question[] => ids.map(id => qb.get(id)).filter(Boolean) as Question[];
   const normalise = (t: AssessmentTest): AssessmentTest => ({
     ...t,
+    status: 'published',
+    mode: 'online',
+    resultRelease: 'immediate',
+    // test-01 stays open from yesterday to tomorrow so the demo always has a live exam; test-02 is upcoming.
+    startAt: t.id === 'test-01' ? `${addDays(TODAY, -1)}T06:00` : t.id === 'test-02' ? `${t.scheduledDate}T10:00` : `${t.scheduledDate}T09:00`,
+    endAt: t.id === 'test-01' ? `${addDays(TODAY, 1)}T22:00` : t.id === 'test-02' ? `${t.scheduledDate}T13:00` : `${t.scheduledDate}T21:00`,
+    instructions: 'Each question has one correct answer. Wrong answers carry negative marks. Do not refresh the page during the exam.',
+    createdBy: 'Dr. K. Ramanathan',
     questionsCount: t.questions.length,
     totalMarks: Math.round(t.questions.reduce((sum, q) => sum + (q.marks || 2), 0) * 100) / 100
   });

@@ -8,7 +8,7 @@ import { StudentManagement } from './components/students/StudentManagement';
 import { CoursesAndBatches } from './components/academics/CoursesAndBatches';
 import { Timetable } from './components/academics/Timetable';
 import { LearningMaterials } from './components/academics/LearningMaterials';
-import { TestAssessment } from './components/academics/TestAssessment';
+import { ExamsModule } from './components/exams/ExamsModule';
 import { FeeManagement } from './components/fees/FeeManagement';
 import { ReportingView } from './components/reports/ReportingView';
 import { CommunicationHub } from './components/communication/CommunicationHub';
@@ -59,7 +59,7 @@ const MainLayout: React.FC = () => {
       case 'materials':
         return <LearningMaterials />;
       case 'tests':
-        return <TestAssessment />;
+        return <ExamsModule />;
       case 'online_classes':
         return <OnlineClasses />;
       case 'leave':

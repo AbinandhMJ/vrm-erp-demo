@@ -103,7 +103,14 @@ export interface Batch {
 }
 
 export type ScholarshipType = 'none' | 'merit_25' | 'ews_rural_40' | 'full_lump_sum_10' | 'custom';
-export type PaymentPlanType = 'one_time' | 'two_installments' | 'three_installments';
+export type PaymentPlanType = 'one_time' | 'two_installments' | 'three_installments' | 'monthly' | 'custom';
+
+/** One row of a fee schedule (used for monthly and custom plans). */
+export interface InstallmentRow {
+  amount: number;
+  dueDate: string; // YYYY-MM-DD
+  label?: string;
+}
 
 export interface Student {
   id: string;
@@ -125,6 +132,8 @@ export interface Student {
   paidFee: number;
   balanceFee: number;
   paymentPlan: PaymentPlanType;
+  /** Note about an agreed custom plan, e.g. "Pays after harvest season". */
+  paymentPlanNote?: string;
   attendancePercentage: number;
   averageTestScore: number;
   portalUsername: string;
@@ -162,6 +171,8 @@ export interface Invoice {
   paidAmount: number;
   paidDate?: string;
   receiptId?: string;
+  /** e.g. "Month 3" or "After Prelims" (custom plans). */
+  label?: string;
 }
 
 export interface PaymentReceipt {
@@ -273,6 +284,21 @@ export interface AssessmentTest {
   negativeMarksPerWrong: number; // e.g. 0.66
   scheduledDate: string;
   batchIds: string[];
+  /** Draft exams are only visible to staff. Missing = published (older data). */
+  status?: 'draft' | 'published';
+  /** Online = students take it in the app; offline = written in class, marks entered by staff. */
+  mode?: 'online' | 'offline';
+  /** Exam window, local 'YYYY-MM-DDTHH:MM'. Students can start between startAt and endAt. */
+  startAt?: string;
+  endAt?: string;
+  instructions?: string;
+  shuffleQuestions?: boolean;
+  /** When students see their score and answers. */
+  resultRelease?: 'immediate' | 'after_close' | 'manual';
+  resultsPublished?: boolean;
+  passPercent?: number;
+  createdBy?: string;
+  updatedAt?: string;
 }
 
 export interface StudentTestAttempt {
@@ -499,4 +525,23 @@ export interface ClassReminder {
 
 export interface AcademySettings {
   youtubeChannelUrl: string;
+}
+
+/** A one-off change to the weekly timetable: an extra (make-up / special) class, or a cancelled session. */
+export interface ScheduleChange {
+  id: string;
+  date: string; // YYYY-MM-DD
+  batchId: string;
+  batchName: string;
+  kind: 'extra' | 'cancelled';
+  /** For a cancelled session: the weekly slot it cancels. */
+  slotId?: string;
+  subject: string;
+  topic: string;
+  facultyName: string;
+  room: string;
+  time: string; // "07:30 AM – 10:30 AM"
+  reason?: string;
+  createdBy: string;
+  createdAt: string;
 }

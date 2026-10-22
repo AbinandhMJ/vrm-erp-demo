@@ -324,7 +324,7 @@ export const StudentManagement: React.FC = () => {
                   <div>
                     <div className="font-semibold text-slate-900 dark:text-white">{inv.invoiceNumber}</div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Installment {inv.installmentIndex} of {inv.totalInstallments} · Due {inv.dueDate}
+                      {inv.label || `Installment ${inv.installmentIndex}`} ({inv.installmentIndex} of {inv.totalInstallments}) · Due {inv.dueDate}
                     </div>
                   </div>
                   <div className="text-right flex items-center gap-3">

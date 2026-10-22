@@ -385,6 +385,14 @@ export const buildSeed = (): SeedData => {
   const fromBank = (ids: string[]): Question[] => ids.map(id => qb.get(id)).filter(Boolean) as Question[];
   const normalise = (t: AssessmentTest): AssessmentTest => ({
     ...t,
+    status: 'published',
+    mode: 'online',
+    resultRelease: 'immediate',
+    // test-01 stays open from yesterday to tomorrow so the demo always has a live exam; test-02 is upcoming.
+    startAt: t.id === 'test-01' ? `${addDays(TODAY, -1)}T06:00` : t.id === 'test-02' ? `${t.scheduledDate}T10:00` : `${t.scheduledDate}T09:00`,
+    endAt: t.id === 'test-01' ? `${addDays(TODAY, 1)}T22:00` : t.id === 'test-02' ? `${t.scheduledDate}T13:00` : `${t.scheduledDate}T21:00`,
+    instructions: 'Each question has one correct answer. Wrong answers carry negative marks. Do not refresh the page during the exam.',
+    createdBy: 'Dr. K. Ramanathan',
     questionsCount: t.questions.length,
     totalMarks: Math.round(t.questions.reduce((sum, q) => sum + (q.marks || 2), 0) * 100) / 100
   });

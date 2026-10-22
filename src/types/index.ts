@@ -273,6 +273,21 @@ export interface AssessmentTest {
   negativeMarksPerWrong: number; // e.g. 0.66
   scheduledDate: string;
   batchIds: string[];
+  /** Draft exams are only visible to staff. Missing = published (older data). */
+  status?: 'draft' | 'published';
+  /** Online = students take it in the app; offline = written in class, marks entered by staff. */
+  mode?: 'online' | 'offline';
+  /** Exam window, local 'YYYY-MM-DDTHH:MM'. Students can start between startAt and endAt. */
+  startAt?: string;
+  endAt?: string;
+  instructions?: string;
+  shuffleQuestions?: boolean;
+  /** When students see their score and answers. */
+  resultRelease?: 'immediate' | 'after_close' | 'manual';
+  resultsPublished?: boolean;
+  passPercent?: number;
+  createdBy?: string;
+  updatedAt?: string;
 }
 
 export interface StudentTestAttempt {
@@ -499,4 +514,23 @@ export interface ClassReminder {
 
 export interface AcademySettings {
   youtubeChannelUrl: string;
+}
+
+/** A one-off change to the weekly timetable: an extra (make-up / special) class, or a cancelled session. */
+export interface ScheduleChange {
+  id: string;
+  date: string; // YYYY-MM-DD
+  batchId: string;
+  batchName: string;
+  kind: 'extra' | 'cancelled';
+  /** For a cancelled session: the weekly slot it cancels. */
+  slotId?: string;
+  subject: string;
+  topic: string;
+  facultyName: string;
+  room: string;
+  time: string; // "07:30 AM – 10:30 AM"
+  reason?: string;
+  createdBy: string;
+  createdAt: string;
 }

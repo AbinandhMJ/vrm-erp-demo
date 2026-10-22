@@ -26,7 +26,12 @@ const SOURCE_LABEL: Record<ImportSource, string> = {
   text: 'text'
 };
 
-export const QuestionImportModal: React.FC<{ onClose: () => void; onImported: (n: number) => void }> = ({ onClose, onImported }) => {
+export const QuestionImportModal: React.FC<{
+  onClose: () => void;
+  onImported: (questions: Question[]) => void;
+  /** Shown in the title when importing straight into an exam. */
+  targetLabel?: string;
+}> = ({ onClose, onImported, targetLabel }) => {
   const { questionBank, importQuestions, currentUser, today, currentStaff } = useApp();
   const existing = useMemo(() => new Set(questionBank.map(q => norm(q.questionText))), [questionBank]);
 
@@ -127,7 +132,7 @@ export const QuestionImportModal: React.FC<{ onClose: () => void; onImported: (n
 
   return (
     <Modal
-      title="Bulk import questions"
+      title={targetLabel ? `Import questions into ${targetLabel}` : "Bulk import questions"}
       subtitle={step === 'review' ? `${drafts.length} found in ${fileName || 'pasted text'} · review before adding to the bank` : 'Excel / CSV, Word, PDF, a photo of a printed page, or pasted text'}
       onClose={onClose}
       dismissible={!busy}

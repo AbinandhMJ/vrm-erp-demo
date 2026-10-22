@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { countdown, examStatus, examWindow, fmtDateTime } from '../../lib/exams';
+import { addDays, formatDate } from '../../lib/dates';
 import {
   Bell,
   RotateCcw,
@@ -44,8 +46,27 @@ export const Header: React.FC = () => {
     currentStudent,
     currentStaff,
     today,
-    setActiveTab
+    setActiveTab,
+    assessmentTests,
+    studentAttempts,
+    scheduleChanges
   } = useApp();
+  const nowN = new Date();
+  const myExams =
+    role === 'student' && currentStudent
+      ? assessmentTests
+          .filter(t => t.status !== 'draft' && t.batchIds.includes(currentStudent.enrolledBatchId))
+          .map(t => ({ t, st: examStatus(t, nowN) }))
+          .filter(
+            ({ t, st }) =>
+              (st === 'live' && !studentAttempts.some(a => a.testId === t.id && a.studentId === currentStudent.id)) ||
+              (st === 'scheduled' && examWindow(t).start.getTime() - nowN.getTime() < 48 * 3600_000)
+          )
+      : [];
+  const myChanges =
+    role === 'student' && currentStudent
+      ? scheduleChanges.filter(c => c.batchId === currentStudent.enrolledBatchId && c.date >= today && c.date <= addDays(today, 7))
+      : [];
   // Class links sent today for this student's batch (most recent first).
   const classLinks =
     role === 'student'
@@ -185,6 +206,42 @@ export const Header: React.FC = () => {
                 </div>
                 
                 <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 mt-2">
+                  {myExams.length > 0 && (
+                    <div className="py-2">
+                      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider block mb-1">Exams</span>
+                      {myExams.map(({ t, st }) => (
+                        <button
+                          key={t.id}
+                          onClick={() => {
+                            setIsNotifOpen(false);
+                            setActiveTab('tests');
+                          }}
+                          className="w-full text-left p-2 rounded-lg bg-amber-50/70 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/40 mb-1.5 text-xs"
+                        >
+                          <div className="font-semibold text-slate-900 dark:text-slate-100">{t.title}</div>
+                          <div className="text-[11px] text-slate-600 dark:text-slate-400">
+                            {st === 'live' ? `Open now, until ${fmtDateTime(examWindow(t).end)}` : `Starts ${fmtDateTime(examWindow(t).start)} (${countdown(examWindow(t).start, nowN)})`}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {myChanges.length > 0 && (
+                    <div className="py-2">
+                      <span className="text-[10px] font-bold text-violet-700 dark:text-violet-400 uppercase tracking-wider block mb-1">Timetable changes</span>
+                      {myChanges.map(c => (
+                        <div key={c.id} className="p-2 rounded-lg bg-violet-50/70 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-900/40 mb-1.5 text-xs">
+                          <div className="font-semibold text-slate-900 dark:text-slate-100">
+                            {c.kind === 'cancelled' ? 'Cancelled' : 'Extra class'}: {c.subject}
+                          </div>
+                          <div className="text-[11px] text-slate-600 dark:text-slate-400">
+                            {formatDate(c.date)} · {c.time}
+                            {c.reason ? ` · ${c.reason}` : ''}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {classLinks.length > 0 && (
                     <div className="py-2">
                       <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase tracking-wider block mb-1">Today's online classes</span>

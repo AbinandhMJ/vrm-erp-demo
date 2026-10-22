@@ -84,7 +84,7 @@ export const Sidebar: React.FC = () => {
     },
     {
       id: 'tests',
-      label: 'Tests & Assessments',
+      label: role === 'student' ? 'My Exams' : 'Exams & Question Bank',
       icon: <ClipboardCheck className="w-4 h-4 shrink-0" />
     },
     {

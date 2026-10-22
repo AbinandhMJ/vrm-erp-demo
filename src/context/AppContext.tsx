@@ -32,7 +32,8 @@ import {
   Holiday,
   OnlineClass,
   ClassReminder,
-  AcademySettings
+  AcademySettings,
+  ScheduleChange
 } from '../types';
 import {
   INITIAL_ANNOUNCEMENTS,
@@ -50,8 +51,9 @@ import { buildSampleExtras, YOUTUBE_CHANNEL } from '../data/sampleExtras';
 import { DEFAULT_HOLIDAYS, workingDaysIn } from '../lib/leave';
 import { classIsFor, occurrenceKey, occurrencesBetween } from '../lib/onlineClasses';
 import { clearFiles, deleteFile } from '../lib/fileStore';
+import { examStatus, examWindow, toLocalInput, totalMarksOf } from '../lib/exams';
 import { canAccess, HOME_TAB } from '../config/access';
-import { nowDisplay, todayISO } from '../lib/dates';
+import { addDays, nowDisplay, todayISO } from '../lib/dates';
 import {
   allocatePayment,
   buildInstallmentSchedule,
@@ -131,6 +133,7 @@ interface AppContextType {
   invoices: Invoice[];
   receipts: PaymentReceipt[];
   schedule: ClassScheduleItem[];
+  scheduleChanges: ScheduleChange[];
   attendance: AttendanceSession[];
   materials: StudyMaterial[];
   assessmentTests: AssessmentTest[];
@@ -173,7 +176,7 @@ interface AppContextType {
   addStudyMaterial: (material: Omit<StudyMaterial, 'id' | 'uploadedAt'>) => StudyMaterial;
   deleteStudyMaterial: (materialId: string) => void;
   /** Adds many reviewed questions at once (bulk import). */
-  importQuestions: (questions: Omit<Question, 'id'>[]) => number;
+  importQuestions: (questions: Omit<Question, 'id'>[]) => Question[];
   /** Student updates their own passport photo. */
   updateStudentPhoto: (studentId: string, photo: string | undefined) => void;
   updateStaffMember: (staffId: string, patch: Partial<Omit<StaffMember, 'id' | 'attendanceRate'>>) => void;
@@ -199,6 +202,24 @@ interface AppContextType {
   addQuestionToBank: (question: Omit<Question, 'id'>) => Question;
   updateQuestionInBank: (questionId: string, updated: Partial<Question>) => void;
   deleteQuestionFromBank: (questionId: string) => void;
+  // Timetable
+  saveScheduleSlot: (slot: Omit<ClassScheduleItem, 'id' | 'batchName'> & { id?: string }) => ClassScheduleItem;
+  deleteScheduleSlot: (slotId: string) => void;
+  addExtraClass: (c: Omit<ScheduleChange, 'id' | 'kind' | 'batchName' | 'createdBy' | 'createdAt'>) => ScheduleChange;
+  cancelClassSession: (slotId: string, date: string, reason: string) => void;
+  removeScheduleChange: (changeId: string) => void;
+
+  // Exams
+  saveExam: (exam: Omit<AssessmentTest, 'id' | 'totalMarks' | 'questionsCount' | 'scheduledDate'> & { id?: string; totalMarks?: number }) => AssessmentTest;
+  deleteExam: (examId: string) => void;
+  duplicateExam: (examId: string) => AssessmentTest | undefined;
+  startExamNow: (examId: string) => void;
+  endExamNow: (examId: string) => void;
+  publishExamResults: (examId: string) => void;
+  setExamQuestions: (examId: string, questions: Question[]) => void;
+  /** Offline (written) exam: staff enter each student's marks. */
+  recordOfflineMarks: (examId: string, entries: { studentId: string; score: number | null }[]) => void;
+
   createTestFromQuestionBank: (data: {
     title: string;
     code: string;
@@ -344,6 +365,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [invoicesRaw, setInvoices] = usePersistentState<Invoice[]>('invoices', () => getBase().invoices);
   const [receipts, setReceipts] = usePersistentState<PaymentReceipt[]>('receipts', () => getBase().receipts);
   const [schedule, setSchedule] = usePersistentState<ClassScheduleItem[]>('schedule', () => INITIAL_SCHEDULE);
+  const [scheduleChanges, setScheduleChanges] = usePersistentState<ScheduleChange[]>('scheduleChanges', () => []);
   const [attendance, setAttendance] = usePersistentState<AttendanceSession[]>('attendance', () => getBase().attendance);
   const [materials, setMaterials] = usePersistentState<StudyMaterial[]>('materials', () => []);
   const [assessmentTests, setAssessmentTests] = usePersistentState<AssessmentTest[]>('assessmentTests', () => getBase().assessmentTests);
@@ -919,18 +941,173 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // ---------- question bank & tests ----------
   const addQuestionToBank = (qData: Omit<Question, 'id'>): Question => {
-    const q: Question = { ...qData, id: `qb-${Date.now()}`, createdAt: today };
+    const q: Question = { ...qData, id: `qb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, createdAt: qData.createdAt || today };
     setQuestionBank(prev => [q, ...prev]);
     return q;
   };
-  const updateQuestionInBank = (questionId: string, updated: Partial<Question>) =>
+  const updateQuestionInBank = (questionId: string, updated: Partial<Question>) => {
+    // Exams that nobody has taken yet use the edited version too.
+    const taken = new Set(studentAttempts.map(a => a.testId));
+    setAssessmentTests(prev =>
+      prev.map(t => {
+        if (taken.has(t.id) || !t.questions.some(q => q.id === questionId)) return t;
+        const questions = t.questions.map(q => (q.id === questionId ? { ...q, ...updated } : q));
+        return { ...t, questions, totalMarks: totalMarksOf(questions) };
+      })
+    );
+    setQuestionBankRaw(questionId, updated);
+  };
+  const setQuestionBankRaw = (questionId: string, updated: Partial<Question>) =>
     setQuestionBank(prev => prev.map(q => (q.id === questionId ? { ...q, ...updated } : q)));
   const deleteQuestionFromBank = (questionId: string) => setQuestionBank(prev => prev.filter(q => q.id !== questionId));
-  const importQuestions = (qs: Omit<Question, 'id'>[]): number => {
+
+  // ---------- exams ----------
+  const examMeta = () => ({ updatedAt: new Date().toISOString() });
+  const saveExam: AppContextType['saveExam'] = data => {
+    const existing = data.id ? assessmentTests.find(t => t.id === data.id) : undefined;
+    const exam: AssessmentTest = {
+      ...(existing || {}),
+      ...data,
+      id: existing?.id || `test-${Date.now().toString(36)}`,
+      totalMarks: data.questions.length ? totalMarksOf(data.questions) : data.totalMarks || 0,
+      questionsCount: data.questions.length,
+      scheduledDate: (data.startAt || toLocalInput(new Date())).slice(0, 10),
+      createdBy: existing?.createdBy || currentAccount?.name || 'Staff',
+      ...examMeta()
+    } as AssessmentTest;
+    setAssessmentTests(prev => (existing ? prev.map(t => (t.id === exam.id ? exam : t)) : [exam, ...prev]));
+    return exam;
+  };
+  const deleteExam = (examId: string) => {
+    setAssessmentTests(prev => prev.filter(t => t.id !== examId));
+    setStudentAttempts(prev => prev.filter(a => a.testId !== examId));
+  };
+  const duplicateExam = (examId: string) => {
+    const t = assessmentTests.find(x => x.id === examId);
+    if (!t) return undefined;
+    const copy: AssessmentTest = {
+      ...t,
+      id: `test-${Date.now().toString(36)}`,
+      title: `${t.title} (copy)`,
+      code: `${t.code}-C`,
+      status: 'draft',
+      resultsPublished: false,
+      createdBy: currentAccount?.name || 'Staff',
+      ...examMeta()
+    };
+    setAssessmentTests(prev => [copy, ...prev]);
+    return copy;
+  };
+  const patchExam = (examId: string, fn: (t: AssessmentTest) => Partial<AssessmentTest>) =>
+    setAssessmentTests(prev => prev.map(t => (t.id === examId ? { ...t, ...fn(t), ...examMeta() } : t)));
+  const startExamNow = (examId: string) =>
+    patchExam(examId, t => {
+      const now = new Date();
+      const w = examWindow(t);
+      const minEnd = new Date(now.getTime() + (t.durationMinutes + 30) * 60_000);
+      return {
+        status: 'published',
+        startAt: toLocalInput(now),
+        scheduledDate: toLocalInput(now).slice(0, 10),
+        endAt: toLocalInput(w.end > minEnd ? w.end : minEnd)
+      };
+    });
+  const endExamNow = (examId: string) => patchExam(examId, () => ({ endAt: toLocalInput(new Date()) }));
+  const publishExamResults = (examId: string) => patchExam(examId, () => ({ resultsPublished: true }));
+  const setExamQuestions = (examId: string, questions: Question[]) =>
+    patchExam(examId, () => ({ questions, questionsCount: questions.length, totalMarks: totalMarksOf(questions) }));
+  const recordOfflineMarks: AppContextType['recordOfflineMarks'] = (examId, entries) => {
+    const t = assessmentTests.find(x => x.id === examId);
+    if (!t) return;
+    const at = (t.startAt ? t.startAt : `${t.scheduledDate}T10:00`) + ':00';
+    setStudentAttempts(prev => {
+      const others = prev.filter(a => a.testId !== examId || !entries.some(e => e.studentId === a.studentId));
+      const fresh = entries
+        .filter(e => e.score !== null && !Number.isNaN(e.score))
+        .map(e => {
+          const st = studentsRaw.find(x => x.id === e.studentId);
+          return {
+            id: `att-${examId}-${e.studentId}`,
+            testId: examId,
+            testTitle: t.title,
+            studentId: e.studentId,
+            studentName: st?.name || '',
+            attemptedAt: at,
+            score: e.score as number,
+            totalMarks: t.totalMarks,
+            accuracyPercentage: t.totalMarks ? Math.round(((e.score as number) / t.totalMarks) * 1000) / 10 : 0,
+            correctAnswers: 0,
+            incorrectAnswers: 0,
+            unattempted: 0,
+            rankInBatch: 0,
+            userAnswers: {},
+            subjectBreakdown: [{ subject: t.subject, score: e.score as number, total: t.totalMarks }],
+            improvementAreas: []
+          } as StudentTestAttempt;
+        });
+      // Rank within each batch.
+      const all = [...others, ...fresh];
+      return all.map(a => {
+        if (a.testId !== examId) return a;
+        const batch = studentsRaw.find(x => x.id === a.studentId)?.enrolledBatchId;
+        const peers = all.filter(b => b.testId === examId && studentsRaw.find(x => x.id === b.studentId)?.enrolledBatchId === batch);
+        return { ...a, rankInBatch: peers.filter(b => b.score > a.score).length + 1 };
+      });
+    });
+  };
+
+  // ---------- timetable ----------
+  const batchNameOf = (batchId: string) => batchesRaw.find(b => b.id === batchId)?.name || batchId;
+  const saveScheduleSlot: AppContextType['saveScheduleSlot'] = data => {
+    const slot: ClassScheduleItem = { ...data, id: data.id || `slot-${Date.now().toString(36)}`, batchName: batchNameOf(data.batchId) };
+    setSchedule(prev => (data.id ? prev.map(x => (x.id === data.id ? slot : x)) : [...prev, slot]));
+    return slot;
+  };
+  const deleteScheduleSlot = (slotId: string) => {
+    setSchedule(prev => prev.filter(x => x.id !== slotId));
+    setScheduleChanges(prev => prev.filter(c => c.slotId !== slotId));
+  };
+  const addExtraClass: AppContextType['addExtraClass'] = data => {
+    const c: ScheduleChange = {
+      ...data,
+      id: `chg-${Date.now().toString(36)}`,
+      kind: 'extra',
+      batchName: batchNameOf(data.batchId),
+      createdBy: currentAccount?.name || 'Staff',
+      createdAt: new Date().toISOString()
+    };
+    setScheduleChanges(prev => [...prev, c]);
+    return c;
+  };
+  const cancelClassSession = (slotId: string, date: string, reason: string) => {
+    const slot = schedule.find(x => x.id === slotId);
+    if (!slot) return;
+    setScheduleChanges(prev => [
+      ...prev.filter(c => !(c.kind === 'cancelled' && c.slotId === slotId && c.date === date)),
+      {
+        id: `chg-${Date.now().toString(36)}`,
+        date,
+        batchId: slot.batchId,
+        batchName: slot.batchName,
+        kind: 'cancelled',
+        slotId,
+        subject: slot.subject,
+        topic: slot.topic,
+        facultyName: slot.facultyName,
+        room: slot.room,
+        time: slot.time,
+        reason,
+        createdBy: currentAccount?.name || 'Staff',
+        createdAt: new Date().toISOString()
+      }
+    ]);
+  };
+  const removeScheduleChange = (changeId: string) => setScheduleChanges(prev => prev.filter(c => c.id !== changeId));
+  const importQuestions = (qs: Omit<Question, 'id'>[]): Question[] => {
     const stamp = Date.now().toString(36);
     const added: Question[] = qs.map((q, i) => ({ ...q, id: `qb-${stamp}-${i}`, createdAt: q.createdAt || today }));
     setQuestionBank(prev => [...added, ...prev]);
-    return added.length;
+    return added;
   };
 
   const createTestFromQuestionBank: AppContextType['createTestFromQuestionBank'] = data => {
@@ -1276,6 +1453,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setInvoices(data.invoices);
     setReceipts(data.receipts);
     setSchedule(INITIAL_SCHEDULE);
+    setScheduleChanges([]);
     setAttendance(data.attendance);
     setMaterials(withContent ? INITIAL_STUDY_MATERIALS : []);
     setAssessmentTests(data.assessmentTests);
@@ -1342,7 +1520,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     role === 'student'
       ? classReminders.filter(r => r.date === today && onlineClasses.some(c => c.id === r.classId && classIsFor(c, currentStudent?.enrolledBatchId))).length
       : 0;
-  const notificationCount = visibleExamAlerts.filter(a => a.status === 'active').length + visibleAnnouncements.length + myClassLinksToday;
+  // Students: open exams they haven't taken, exams in the next 2 days, and timetable changes this week.
+  const nowForNotif = new Date();
+  const myExamNotices =
+    role === 'student' && currentStudent
+      ? assessmentTests.filter(t => {
+          if (t.status === 'draft' || !t.batchIds.includes(currentStudent.enrolledBatchId)) return false;
+          const st = examStatus(t, nowForNotif);
+          if (st === 'live') return !studentAttempts.some(a => a.testId === t.id && a.studentId === currentStudent.id);
+          return st === 'scheduled' && examWindow(t).start.getTime() - nowForNotif.getTime() < 48 * 3600_000;
+        }).length
+      : 0;
+  const myScheduleNotices =
+    role === 'student' && currentStudent
+      ? scheduleChanges.filter(c => c.batchId === currentStudent.enrolledBatchId && c.date >= today && c.date <= addDays(today, 7)).length
+      : 0;
+  const notificationCount =
+    visibleExamAlerts.filter(a => a.status === 'active').length + visibleAnnouncements.length + myClassLinksToday + myExamNotices + myScheduleNotices;
 
   return (
     <AppContext.Provider
@@ -1376,6 +1570,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         invoices,
         receipts,
         schedule,
+        scheduleChanges,
+        saveScheduleSlot,
+        deleteScheduleSlot,
+        addExtraClass,
+        cancelClassSession,
+        removeScheduleChange,
+        saveExam,
+        deleteExam,
+        duplicateExam,
+        startExamNow,
+        endExamNow,
+        publishExamResults,
+        setExamQuestions,
+        recordOfflineMarks,
         attendance,
         materials,
         assessmentTests,
